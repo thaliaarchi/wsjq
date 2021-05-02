@@ -6,7 +6,7 @@ in jq.
 ## Usage
 
 ```sh
-jq -nf ws.jq
+./wsjq <file>
 ```
 
 ## License
