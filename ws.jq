@@ -4,6 +4,37 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+def inststr:
+  if .arg != null then "\(.typ) \(.arg)" else .typ end;
+def instasm:
+  if .typ == "label" then "\(.arg):"
+  elif .typ == "EOF" then "; EOF"
+  else "    \(inststr)" end;
+def instasmpos($mark):
+  "\(.pos)" + (if $mark then ":" else "-" end) + " \(instasm)";
+
+def disasm:
+  [.prog[] | instasm | .+"\n"] | join("");
+def disasmpos:
+  .prog | map(instasmpos(false) + "\n") | join("");
+def trace($pc; $n):
+  [.prog[], {typ:"EOF", pos:.src|length}]
+  | to_entries
+  | if $pc < $n then .[:$pc+$n+1]
+    else .[$pc-$n:$pc+$n+1] end
+  | map(.value | instasmpos(.key == $pc) + "\n")
+  | join("");
+
+def parse_error($msg; $pos; $inst):
+  "Parse error: \($msg) at \($pos)"
+  + (if $inst != null then $inst | inststr else "" end)
+  + "\n\n"
+  + trace(.prog|length; 5) | halt_error(1);
+def inst_error($msg; $inst):
+  parse_error($msg; $inst.pos; $inst);
+def badinst($typ):
+  inst_error("unrecognized instruction"; {typ:$typ, pos});
+
 def matchinst(s; t; l; $can_eof):
   .src[.i] as $ch | .i+=1 |
   if   $ch == 32 then s
@@ -11,21 +42,8 @@ def matchinst(s; t; l; $can_eof):
   elif $ch == 10 then l
   elif .i < (.src|length) then matchinst(s; t; l; $can_eof)
   elif $can_eof then .
-  else "Parse error: unexpected EOF at \(.i)\n" | halt_error(1) end;
+  else parse_error("unexpected EOF"; .i-1; null) end;
 def matchinst(s; t; l): matchinst(s; t; l; false);
-
-def inststr:
-  if .arg != null then "\(.typ) \(.arg)" else .typ end;
-def disasm:
-  [.prog[]
-    | (if .typ == "label" then "\(.arg):"
-       else "    \(inststr)" end) + "\n"] | join("");
-
-def inst_error($msg; $inst):
-  "Parse error: \($msg) at \($inst.pos): \($inst | inststr)\n\n"
-  + disasm | halt_error(1);
-def badinst($typ):
-  inst_error("unrecognized instruction"; {typ:$typ, pos});
 
 def parsearg:
   def arg:
@@ -104,7 +122,7 @@ def parse:
         inst("end") | parse);      # LLL   end
       true); # allow trailing LF
   true)
-  | del(.src) | del(.i) | del(.pos) | del(.arg);
+  | del(.i) | del(.pos) | del(.arg);
 
 {
   src: $src|explode,
@@ -113,5 +131,4 @@ def parse:
   labels: {},
 }
 | parse
-| disasm
-| halt_error(0)
+| disasmpos
