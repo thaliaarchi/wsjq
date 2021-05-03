@@ -10,7 +10,7 @@ def instasm:
   if .typ == "label" then "\(.arg):"
   else "    \(inststr)" end;
 def instasmpos($mark):
-  "\(.pos)" + (if $mark then "#" else "-" end) + " \(instasm)";
+  "\(.pos)" + if $mark then "#" else "-" end + " \(instasm)";
 
 def disasm:
   [.prog[] | instasm | .+"\n"] | join("");
@@ -23,24 +23,22 @@ def trace($pc; $n):
   | map((.key == $pc) as $mark | .value | instasmpos($mark) + "\n")
   | join("");
 
-def parse_error($msg; $pos; $inst):
-  "Parse error: \($msg) at \($pos)"
-  + (if $inst != null then ": \($inst | inststr)" else "" end)
-  + "\n\n"
-  + trace(.prog|length; 5) | halt_error(1);
 def inst_error($msg; $inst):
-  parse_error($msg; $inst.pos; $inst);
+  "Error: \($msg) at \($inst.pos)"
+  + if $inst != null then ": \($inst | inststr)" else "" end
+  + "\n\n"
+  + trace(.pc-1 // (.prog|length); 5) | halt_error(1);
 
 def match_inst(s; t; l; eof):
   .src[.i] as $ch | .i+=1 |
-  if   $ch == 32 then .tok += "S" | s
-  elif $ch == 9  then .tok += "T" | t
-  elif $ch == 10 then .tok += "L" | l
+  if   $ch == 32 then .tok += "S" | s # space
+  elif $ch == 9  then .tok += "T" | t # tab
+  elif $ch == 10 then .tok += "L" | l # lf
   elif .i >= (.src|length) then eof
   else match_inst(s; t; l; eof) end;
 def match_inst(s; t; l):
   match_inst(s; t; l;
-    parse_error("unexpected EOF"; .i-1; {typ:.tok, pos}));
+    inst_error("unexpected EOF"; {typ:.tok, pos:(.i-1)}));
 
 def _parse:
   def parse_num:
@@ -123,13 +121,62 @@ def _parse:
 
 def parse:
   {
-    src: explode,
-    i: 0,
-    tok: "",
-    prog: [],
-    labels: {},
+    src: explode, # program source
+    i: 0,         # read offset
+    pos: 0,       # instruction start offset
+    tok: "",      # current token
+    prog: [],     # instructions
+    labels: {},   # map from label to pc
   }
   | _parse
   | del(.i, .pos, .tok);
 
-$src | parse | disasmpos
+def _interpret:
+  def push($n): .s += [$n];
+  def pop: .s |= .[:-1];
+  def top: .s[-1];
+  def top2: .s[-2];
+  def jmp($l): .pc = .labels[$l|tostring];
+
+  (.prog[.pc] // {typ:"end"}) as $inst |
+  $inst as {typ:$t, arg:$n} |
+  .pc += 1 |
+  if   $t == "push"     then push($n)
+  elif $t == "dup"      then push(top)
+  elif $t == "copy"     then push(.s[-$n-1])
+  elif $t == "swap"     then .s = .s[:-2] + [top, top2]
+  elif $t == "drop"     then pop
+  elif $t == "slide"    then .s = .s[:-$n-1] + [top]
+  elif $t == "add"      then top2 += top | pop
+  elif $t == "sub"      then top2 -= top | pop
+  elif $t == "mul"      then top2 *= top | pop
+  elif $t == "div"      then top2 /= top | pop
+  elif $t == "mod"      then top2 %= top | pop
+  elif $t == "store"    then .h[top2] = top | pop | pop
+  elif $t == "retrieve" then top = .h[top] // 0
+  elif $t == "label"    then .
+  elif $t == "call"     then .c += [.pc] | jmp($n)
+  elif $t == "jmp"      then jmp($n)
+  elif $t == "jz"       then if top == 0 then jmp($n) else . end | pop
+  elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
+  elif $t == "ret"      then .pc = .c[-1] | .c |= .[:-1]
+  elif $t == "end"      then .
+  elif $t == "printc"   then .out += ([top]|implode) | pop
+  elif $t == "printi"   then .out += (top|tostring) | pop
+  elif $t == "readc"    then .h[top] = .in[-1] | .in |= .[:-1] | pop
+  elif $t == "readi"    then .h[top] = .in[-1] | .in |= .[:-1] | pop # TODO
+  else inst_error("malformed inst"; $inst) end
+  | if $t != "end" then _interpret else . end;
+
+def interpret:
+  . * {
+    pc: 0,   # program counter
+    s: [],   # data stack
+    c: [],   # call stack
+    h: {},   # heap
+    in: "",  # stdin (TODO)
+    out: "", # stdout
+  }
+  | _interpret;
+
+$src | parse | interpret.out
