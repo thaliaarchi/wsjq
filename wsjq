@@ -9,4 +9,4 @@ if [ $# -ne 1 ]; then
   echo "usage: $0 <file>" && exit 2
 fi
 
-jq -njM --rawfile src "$1" -f ws.jq
+jq -njMR --rawfile src "$1" -f ws.jq

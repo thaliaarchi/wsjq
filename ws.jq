@@ -17,11 +17,11 @@ def disasm:
 def disasmpos:
   .prog | map(instasmpos(false) + "\n") | join("");
 def trace($pc; $n):
-  .prog | to_entries
-  | if $pc < $n then .[:$pc+$n+1]
-    else .[$pc-$n:$pc+$n+1] end
-  | map((.key == $pc) as $mark | .value | instasmpos($mark) + "\n")
-  | join("");
+  .prog | to_entries |
+  if $pc < $n then .[:$pc+$n+1]
+  else .[$pc-$n:$pc+$n+1] end |
+  map((.key == $pc) as $mark | .value | instasmpos($mark) + "\n") |
+  join("");
 
 def inst_error($msg; $inst):
   "Error: \($msg) at \($inst.pos)"
@@ -56,8 +56,8 @@ def _parse:
   def inst_label:
     if .labels[.arg|tostring] == null
     then .labels[.arg|tostring] = (.prog|length)
-    else inst_error("label redefined"; {typ:"label", arg, pos}) end
-    | inst("label");
+    else inst_error("label redefined"; {typ:"label", arg, pos}) end |
+    inst("label");
   def err:
     inst_error("unrecognized instruction"; {typ:.tok, pos});
 
@@ -127,9 +127,9 @@ def parse:
     tok: "",      # current token
     prog: [],     # instructions
     labels: {},   # map from label to pc
-  }
-  | _parse
-  | del(.i, .pos, .tok);
+  } |
+  _parse |
+  del(.i, .pos, .tok);
 
 def _interpret:
   def push($n): .s += [$n];
@@ -137,6 +137,8 @@ def _interpret:
   def top: .s[-1];
   def top2: .s[-2];
   def jmp($l): .pc = .labels[$l|tostring];
+  def store($addr; $val): .h[$addr|tostring] = $val;
+  def read: if .in == "" then .in = input else . end;
 
   (.prog[.pc] // {typ:"end"}) as $inst |
   $inst as {typ:$t, arg:$n} |
@@ -152,8 +154,8 @@ def _interpret:
   elif $t == "mul"      then top2 *= top | pop
   elif $t == "div"      then top2 /= top | pop
   elif $t == "mod"      then top2 %= top | pop
-  elif $t == "store"    then .h[top2] = top | pop | pop
-  elif $t == "retrieve" then top = .h[top] // 0
+  elif $t == "store"    then store(top2; top) | pop | pop
+  elif $t == "retrieve" then top = .h[top|tostring] // 0
   elif $t == "label"    then .
   elif $t == "call"     then .c += [.pc] | jmp($n)
   elif $t == "jmp"      then jmp($n)
@@ -163,10 +165,14 @@ def _interpret:
   elif $t == "end"      then .
   elif $t == "printc"   then .out += ([top]|implode) | pop
   elif $t == "printi"   then .out += (top|tostring) | pop
-  elif $t == "readc"    then .h[top] = .in[-1] | .in |= .[:-1] | pop
-  elif $t == "readi"    then .h[top] = .in[-1] | .in |= .[:-1] | pop # TODO
-  else inst_error("malformed inst"; $inst) end
-  | if $t != "end" then _interpret else . end;
+  elif $t == "readc"    then
+    read | store(top; (.in|explode)[0] // 0) |
+    .in |= ((explode)[1:]|implode) | pop
+  elif $t == "readi"    then
+    read | store(top; .in|tonumber // 0) | # TODO only allow integers
+    .in = "" | pop
+  else inst_error("malformed instruction"; $inst) end |
+  if $t != "end" then _interpret else . end;
 
 def interpret:
   . * {
@@ -174,9 +180,9 @@ def interpret:
     s: [],   # data stack
     c: [],   # call stack
     h: {},   # heap
-    in: "",  # stdin (TODO)
+    in: "",  # stdin
     out: "", # stdout
-  }
-  | _interpret;
+  } |
+  _interpret;
 
 $src | parse | interpret.out
