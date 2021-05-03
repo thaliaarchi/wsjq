@@ -8,7 +8,6 @@ def inststr:
   if .arg != null then "\(.typ) \(.arg)" else .typ end;
 def instasm:
   if .typ == "label" then "\(.arg):"
-  elif .typ == "EOF" then "; EOF"
   else "    \(inststr)" end;
 def instasmpos($mark):
   "\(.pos)" + (if $mark then "#" else "-" end) + " \(instasm)";
@@ -18,8 +17,7 @@ def disasm:
 def disasmpos:
   .prog | map(instasmpos(false) + "\n") | join("");
 def trace($pc; $n):
-  [.prog[], {typ:"EOF", pos:.src|length}]
-  | to_entries
+  .prog | to_entries
   | if $pc < $n then .[:$pc+$n+1]
     else .[$pc-$n:$pc+$n+1] end
   | map((.key == $pc) as $mark | .value | instasmpos($mark) + "\n")
@@ -27,108 +25,111 @@ def trace($pc; $n):
 
 def parse_error($msg; $pos; $inst):
   "Parse error: \($msg) at \($pos)"
-  + (if $inst != null then $inst | inststr else "" end)
+  + (if $inst != null then ": \($inst | inststr)" else "" end)
   + "\n\n"
   + trace(.prog|length; 5) | halt_error(1);
 def inst_error($msg; $inst):
   parse_error($msg; $inst.pos; $inst);
-def badinst($typ):
-  inst_error("unrecognized instruction"; {typ:$typ, pos});
 
-def matchinst(s; t; l; $can_eof):
+def match_inst(s; t; l; eof):
   .src[.i] as $ch | .i+=1 |
-  if   $ch == 32 then s
-  elif $ch == 9  then t
-  elif $ch == 10 then l
-  elif .i < (.src|length) then matchinst(s; t; l; $can_eof)
-  elif $can_eof then .
-  else parse_error("unexpected EOF"; .i-1; null) end;
-def matchinst(s; t; l): matchinst(s; t; l; false);
+  if   $ch == 32 then .tok += "S" | s
+  elif $ch == 9  then .tok += "T" | t
+  elif $ch == 10 then .tok += "L" | l
+  elif .i >= (.src|length) then eof
+  else match_inst(s; t; l; eof) end;
+def match_inst(s; t; l):
+  match_inst(s; t; l;
+    parse_error("unexpected EOF"; .i-1; {typ:.tok, pos}));
 
-def parsearg:
+def _parse:
+  def parse_num:
+    match_inst(
+      .arg*=2 | parse_num;           # 0 digit
+      .arg*=2 | .arg+=1 | parse_num; # 1 digit
+      .);                            # done
   def arg:
-    matchinst(
-      .arg*=2 | arg;
-      .arg*=2 | .arg+=1 | arg;
-      .);
-  .arg=0 | matchinst(arg; arg | .arg*=-1; .);
+    .arg = 0 | match_inst(parse_num; parse_num | .arg*=-1; .); # signed
+  def lbl:
+    .arg = 0 | parse_num; # unsigned
 
-def inst($typ):
-  .prog[.prog|length] = {typ:$typ, pos};
-def instarg($typ):
-  parsearg |
-  .prog[.prog|length] = {typ:$typ, arg, pos};
-def instlabel:
-  instarg("label") |
-  if .labels[.arg|tostring] == null
-  then .labels[.arg|tostring] = (.prog|length)
-  else inst_error("label redefined"; {typ:"label", arg, pos}) end;
+  def inst($typ):
+    .prog += [{typ:$typ, arg, pos}] | del(.arg) | _parse;
+  def inst_label:
+    if .labels[.arg|tostring] == null
+    then .labels[.arg|tostring] = (.prog|length)
+    else inst_error("label redefined"; {typ:"label", arg, pos}) end
+    | inst("label");
+  def err:
+    inst_error("unrecognized instruction"; {typ:.tok, pos});
+
+  .pos = .i | .tok = "" |
+  match_inst(
+    # Stack
+    match_inst(
+      arg | inst("push");     # SS  n push
+      match_inst(
+        arg | inst("copy");   # STS n copy
+        err;
+        arg | inst("slide")); # STL n slide
+      match_inst(
+        inst("dup");          # SLS   dup
+        inst("swap");         # SLT   swap
+        inst("drop")));       # SLL   drop
+    match_inst(
+      # Arithmetic
+      match_inst(
+        match_inst(
+          inst("add");        # TSSS  add
+          inst("sub");        # TSST  sub
+          inst("mul"));       # TSSL  mul
+        match_inst(
+          inst("div");        # TSTS  div
+          inst("mod");        # TSTT  mod
+          err);
+        err);
+      # Heap
+      match_inst(
+        inst("store");        # TTS   store
+        inst("retrieve");     # TTT   retrieve
+        err);
+      # I/O
+      match_inst(
+        match_inst(
+          inst("printc");     # TLSS  printc
+          inst("printi");     # TLST  printi
+          err);
+        match_inst(
+          inst("readc");      # TLTS  readc
+          inst("readi");      # TLTT  readi
+          err);
+        err));
+    # Control flow
+    match_inst(
+      match_inst(
+        lbl | inst_label;     # LSS l label
+        lbl | inst("call");   # LST l call
+        lbl | inst("jmp"));   # LSL l jmp
+      match_inst(
+        lbl | inst("jz");     # LTS l jz
+        lbl | inst("jn");     # LTT l jn
+        inst("ret"));         # LTL   ret
+      match_inst(
+        err;
+        err;
+        inst("end"));         # LLL   end
+      .); # allow trailing LF
+    .);
 
 def parse:
-  .pos = .i |
-  matchinst(
-    # Stack
-    matchinst(
-      instarg("push") | parse;     # SS  n push
-      matchinst(
-        instarg("copy") | parse;   # STS n copy
-        badinst("STT");
-        instarg("slide") | parse); # STL n slide
-      matchinst(
-        inst("dup") | parse;       # SLS   dup
-        inst("swap") | parse;      # SLT   swap
-        inst("drop") | parse));    # SLL   drop
-    matchinst(
-      # Arithmetic
-      matchinst(
-        matchinst(
-          inst("add") | parse;     # TSSS  add
-          inst("sub") | parse;     # TSST  sub
-          inst("mul") | parse);    # TSSL  mul
-        matchinst(
-          inst("div") | parse;     # TSTS  div
-          inst("mod") | parse;     # TSTT  mod
-          badinst("TSTL"));
-        badinst("TSL"));
-      # Heap
-      matchinst(
-        inst("store") | parse;     # TTS   store
-        inst("retrieve") | parse;  # TTT   retrieve
-        badinst("TTL"));
-      # I/O
-      matchinst(
-        matchinst(
-          inst("printc") | parse;  # TLSS  printc
-          inst("printi") | parse;  # TLST  printi
-          badinst("TLSL"));
-        matchinst(
-          inst("readc") | parse;   # TLTS  readc
-          inst("readi") | parse;   # TLTT  readi
-          badinst("TLTL"));
-        badinst("TLL")));
-    # Control flow
-    matchinst(
-      matchinst(
-        instlabel | parse;         # LSS l label
-        instarg("call") | parse;   # LST l call
-        instarg("jmp") | parse);   # LSL l jmp
-      matchinst(
-        instarg("jz") | parse;     # LTS l jz
-        instarg("jn") | parse;     # LTT l jn
-        inst("ret") | parse);      # LTL   ret
-      matchinst(
-        badinst("LLS");
-        badinst("LLT");
-        inst("end") | parse);      # LLL   end
-      true); # allow trailing LF
-  true)
-  | del(.i) | del(.pos) | del(.arg);
+  {
+    src: explode,
+    i: 0,
+    tok: "",
+    prog: [],
+    labels: {},
+  }
+  | _parse
+  | del(.i, .pos, .tok);
 
-{
-  src: $src|explode,
-  i: 0,
-  prog: [],
-  labels: {},
-}
-| parse
-| disasmpos
+$src | parse | disasmpos
