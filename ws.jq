@@ -11,7 +11,7 @@ def instasm:
   elif .typ == "EOF" then "; EOF"
   else "    \(inststr)" end;
 def instasmpos($mark):
-  "\(.pos)" + (if $mark then ":" else "-" end) + " \(instasm)";
+  "\(.pos)" + (if $mark then "#" else "-" end) + " \(instasm)";
 
 def disasm:
   [.prog[] | instasm | .+"\n"] | join("");
@@ -22,7 +22,7 @@ def trace($pc; $n):
   | to_entries
   | if $pc < $n then .[:$pc+$n+1]
     else .[$pc-$n:$pc+$n+1] end
-  | map(.value | instasmpos(.key == $pc) + "\n")
+  | map((.key == $pc) as $mark | .value | instasmpos($mark) + "\n")
   | join("");
 
 def parse_error($msg; $pos; $inst):
