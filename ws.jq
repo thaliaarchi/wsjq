@@ -13,7 +13,7 @@ def instasmpos($mark):
   "\(.pos)" + if $mark then "#" else "-" end + " \(instasm)";
 
 def disasm:
-  [.prog[] | instasm | .+"\n"] | join("");
+  [.prog[] | instasm | . + "\n"] | join("");
 def disasmpos:
   .prog | map(instasmpos(false) + "\n") | join("");
 def trace($pc; $n):
@@ -24,7 +24,7 @@ def trace($pc; $n):
   join("");
 
 def inst_error($msg; $inst):
-  "Error: \($msg) at \($inst.pos)"
+  "Error: \($msg) at offset \($inst.pos)"
   + if $inst != null then ": \($inst | inststr)" else "" end
   + "\n\n"
   + trace(.pc-1 // (.prog|length); 5) | halt_error(1);
@@ -131,7 +131,7 @@ def parse:
   _parse |
   del(.i, .pos, .tok);
 
-def _interpret:
+def _interpret(on_end):
   def push($n): .s += [$n];
   def pop: .s |= .[:-1];
   def top: .s[-1];
@@ -162,27 +162,31 @@ def _interpret:
   elif $t == "jz"       then if top == 0 then jmp($n) else . end | pop
   elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
   elif $t == "ret"      then .pc = .c[-1] | .c |= .[:-1]
-  elif $t == "end"      then .
-  elif $t == "printc"   then .out += ([top]|implode) | pop
-  elif $t == "printi"   then .out += (top|tostring) | pop
+  elif $t == "end"      then on_end
+  elif $t == "printc"   then ([top] | implode), pop
+  elif $t == "printi"   then (top | tostring), pop
   elif $t == "readc"    then
     read | store(top; (.in|explode)[0] // 0) |
     .in |= ((explode)[1:]|implode) | pop
   elif $t == "readi"    then
-    read | store(top; .in|tonumber // 0) | # TODO only allow integers
+    read |
+    if .in | test("^\\s*[+-]?\\d+\\s*$"; "") then . # allow only integers
+    else inst_error("invalid integer"; $inst) end |
+    store(top; .in|tonumber // 0) |
     .in = "" | pop
   else inst_error("malformed instruction"; $inst) end |
-  if $t != "end" then _interpret else . end;
+  if type == "string" then . # generate stream of printed strings
+  else _interpret(on_end) end;
 
-def interpret:
+def interpret(on_end):
   . * {
     pc: 0,   # program counter
     s: [],   # data stack
     c: [],   # call stack
     h: {},   # heap
     in: "",  # stdin
-    out: "", # stdout
   } |
-  _interpret;
+  _interpret(on_end);
+def interpret: interpret(empty);
 
-$src | parse | interpret.out
+$src | parse | interpret
