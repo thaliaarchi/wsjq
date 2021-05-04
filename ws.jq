@@ -12,16 +12,18 @@ def instasm:
 def instasmpos($mark):
   "\(.pos)" + if $mark then "#" else "-" end + " \(instasm)";
 
+def prog_entries:
+  .prog | to_entries | map(.value * {pc:.key});
+
 def disasm:
   [.prog[] | instasm | . + "\n"] | join("");
 def disasmpos:
   .prog | map(instasmpos(false) + "\n") | join("");
 def trace($pc; $n):
-  .prog | to_entries |
+  prog_entries |
   if $pc < $n then .[:$pc+$n+1]
   else .[$pc-$n:$pc+$n+1] end |
-  map((.key == $pc) as $mark | .value | instasmpos($mark) + "\n") |
-  join("");
+  map(instasmpos(.pc == $pc) + "\n") | join("");
 
 def inst_error($msg; $inst):
   "Error: \($msg) at offset \($inst.pos)"
@@ -40,98 +42,88 @@ def match_inst(s; t; l):
   match_inst(s; t; l;
     inst_error("unexpected EOF"; {typ:.tok, pos:(.i-1)}));
 
-def _parse:
+def parse_inst:
   def parse_num:
     match_inst(
       .arg*=2 | parse_num;           # 0 digit
       .arg*=2 | .arg+=1 | parse_num; # 1 digit
       .);                            # done
-  def arg:
-    .arg = 0 | match_inst(parse_num; parse_num | .arg*=-1; .); # signed
-  def lbl:
-    .arg = 0 | parse_num; # unsigned
+  def inst_num($typ; $signed):
+    .arg = 0 |
+    if $signed then match_inst(parse_num; parse_num | .arg*=-1; .)
+    else parse_num end |
+    .prog += [{typ:$typ, arg, pos}] | del(.arg);
 
-  def inst($typ):
-    .prog += [{typ:$typ, arg, pos}] | del(.arg) | _parse;
-  def inst_label:
-    if .labels[.arg|tostring] == null
-    then .labels[.arg|tostring] = (.prog|length)
-    else inst_error("label redefined"; {typ:"label", arg, pos}) end |
-    inst("label");
-  def err:
-    inst_error("unrecognized instruction"; {typ:.tok, pos});
+  def inst($typ): .prog += [{typ:$typ, pos}];
+  def inst_arg($typ): inst_num($typ; true);
+  def inst_lbl($typ): inst_num($typ; false);
+  def inst_err: inst_error("unrecognized instruction"; {typ:.tok, pos});
 
   .pos = .i | .tok = "" |
   match_inst(
     # Stack
     match_inst(
-      arg | inst("push");     # SS  n push
+      inst_arg("push");     # SS  n push
       match_inst(
-        arg | inst("copy");   # STS n copy
-        err;
-        arg | inst("slide")); # STL n slide
+        inst_arg("copy");   # STS n copy
+        inst_err;
+        inst_arg("slide")); # STL n slide
       match_inst(
-        inst("dup");          # SLS   dup
-        inst("swap");         # SLT   swap
-        inst("drop")));       # SLL   drop
+        inst("dup");        # SLS   dup
+        inst("swap");       # SLT   swap
+        inst("drop")));     # SLL   drop
     match_inst(
       # Arithmetic
       match_inst(
         match_inst(
-          inst("add");        # TSSS  add
-          inst("sub");        # TSST  sub
-          inst("mul"));       # TSSL  mul
+          inst("add");      # TSSS  add
+          inst("sub");      # TSST  sub
+          inst("mul"));     # TSSL  mul
         match_inst(
-          inst("div");        # TSTS  div
-          inst("mod");        # TSTT  mod
-          err);
-        err);
+          inst("div");      # TSTS  div
+          inst("mod");      # TSTT  mod
+          inst_err);
+        inst_err);
       # Heap
       match_inst(
-        inst("store");        # TTS   store
-        inst("retrieve");     # TTT   retrieve
-        err);
+        inst("store");      # TTS   store
+        inst("retrieve");   # TTT   retrieve
+        inst_err);
       # I/O
       match_inst(
         match_inst(
-          inst("printc");     # TLSS  printc
-          inst("printi");     # TLST  printi
-          err);
+          inst("printc");   # TLSS  printc
+          inst("printi");   # TLST  printi
+          inst_err);
         match_inst(
-          inst("readc");      # TLTS  readc
-          inst("readi");      # TLTT  readi
-          err);
-        err));
+          inst("readc");    # TLTS  readc
+          inst("readi");    # TLTT  readi
+          inst_err);
+        inst_err));
     # Control flow
     match_inst(
       match_inst(
-        lbl | inst_label;     # LSS l label
-        lbl | inst("call");   # LST l call
-        lbl | inst("jmp"));   # LSL l jmp
+        inst_lbl("label");  # LSS l label
+        inst_lbl("call");   # LST l call
+        inst_lbl("jmp"));   # LSL l jmp
       match_inst(
-        lbl | inst("jz");     # LTS l jz
-        lbl | inst("jn");     # LTT l jn
-        inst("ret"));         # LTL   ret
+        inst_lbl("jz");     # LTS l jz
+        inst_lbl("jn");     # LTT l jn
+        inst("ret"));       # LTL   ret
       match_inst(
-        err;
-        err;
-        inst("end"));         # LLL   end
+        inst_err;
+        inst_err;
+        inst("end"));       # LLL   end
       .); # allow trailing LF
     .);
 
-def parse:
-  {
-    src: explode, # program source
-    i: 0,         # read offset
-    pos: 0,       # instruction start offset
-    tok: "",      # current token
-    prog: [],     # instructions
-    labels: {},   # map from label to pc
-  } |
-  _parse |
-  del(.i, .pos, .tok);
+def label_map:
+  reduce (prog_entries[] | select(.typ == "label")) as $inst
+    ({}; ($inst.arg|tostring) as $lbl |
+      if .[$lbl] == null then .[$lbl] = $inst.pc
+      else inst_error("label redefined"; $inst) end);
 
-def _interpret(on_end):
+def interpret_inst:
   def push($n): .s += [$n];
   def pop: .s |= .[:-1];
   def top: .s[-1];
@@ -140,7 +132,10 @@ def _interpret(on_end):
   def store($addr; $val): .h[$addr|tostring] = $val;
   def read: if .in == "" then .in = input else . end;
 
-  (.prog[.pc] // {typ:"end"}) as $inst |
+  if .pc < (.prog|length) then .
+  else inst_error("interpreter stopped"; null) end |
+
+  .prog[.pc] as $inst |
   $inst as {typ:$t, arg:$n} |
   .pc += 1 |
   if   $t == "push"     then push($n)
@@ -162,7 +157,7 @@ def _interpret(on_end):
   elif $t == "jz"       then if top == 0 then jmp($n) else . end | pop
   elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
   elif $t == "ret"      then .pc = .c[-1] | .c |= .[:-1]
-  elif $t == "end"      then on_end
+  elif $t == "end"      then .pc = (.prog|length)
   elif $t == "printc"   then ([top] | implode), pop
   elif $t == "printi"   then (top | tostring), pop
   elif $t == "readc"    then
@@ -170,23 +165,37 @@ def _interpret(on_end):
     .in |= ((explode)[1:]|implode) | pop
   elif $t == "readi"    then
     read |
-    if .in | test("^\\s*[+-]?\\d+\\s*$"; "") then . # allow only integers
+    if .in | test("^\\s*[+-]?\\d+\\s*$"; "") then .
     else inst_error("invalid integer"; $inst) end |
     store(top; .in|tonumber // 0) |
     .in = "" | pop
-  else inst_error("malformed instruction"; $inst) end |
-  if type == "string" then . # generate stream of printed strings
-  else _interpret(on_end) end;
+  else inst_error("malformed instruction"; $inst) end;
 
-def interpret(on_end):
-  . * {
-    pc: 0,   # program counter
-    s: [],   # data stack
-    c: [],   # call stack
-    h: {},   # heap
-    in: "",  # stdin
+def parse:
+  def _parse:
+    if .i < (.src|length) then parse_inst | _parse else . end;
+  {
+    src: explode, # program source
+    i: 0,         # read offset
+    pos: 0,       # instruction start offset
+    tok: "",      # current token
+    prog: [],     # instructions
   } |
-  _interpret(on_end);
-def interpret: interpret(empty);
+  _parse | del(.i, .pos, .tok);
+
+def interpret:
+  def _interpret:
+    if type == "string" then . # generate stream of printed strings
+    elif .pc >= (.prog|length) then empty
+    else interpret_inst | _interpret end;
+  . * {
+    labels: label_map,
+    pc: 0,  # program counter
+    s: [],  # data stack
+    c: [],  # call stack
+    h: {},  # heap
+    in: "", # stdin
+  } |
+  _interpret;
 
 $src | parse | interpret
