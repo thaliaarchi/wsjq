@@ -29,18 +29,16 @@ def trace($pc; $n):
   else .[$pc-$n:$pc+$n+1] end |
   map(inst_asm_pos(.pc == $pc) + "\n") | join("");
 
-def _error($msg; $inst; $pc):
+def inst_error($msg; $inst):
+  (.pc0 // .prog|length) as $pc |
+  ($inst // .prog[$pc]) as $inst |
   "Error: \($msg)"
   + if $inst.pos != null then " at offset \($inst.pos)" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
   + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end |
   halt_error(1);
-def inst_error($msg; $inst):
-  (.pc0 // .prog|length) as $pc |
-  ($inst // .prog[$pc]) as $inst |
-  _error($msg; $inst; $pc);
-
 def inst_error($msg): inst_error($msg; null);
+
 def assert($cond; msg; inst):
   if $cond then . else inst_error(msg; inst) end;
 def assert($cond; msg): assert($cond; msg; null);
@@ -131,13 +129,25 @@ def parse_inst:
       .); # allow trailing LF
     .);
 
+def parse:
+  {
+    src: explode, # program source
+    i: 0,         # read offset
+    pos: 0,       # instruction start offset
+    tok: "",      # current token
+    prog: [],     # instructions
+  } |
+  def _parse:
+    if .i < (.src|length) then parse_inst | _parse else . end;
+  _parse | del(.i, .pos, .tok);
+
 def label_map:
   reduce (.prog | prog_entries[] | select(.typ == "label")) as $inst
     ({}; ($inst.arg|tostring) as $lbl |
       assert(.[$lbl] == null; "label redefined"; $inst) |
       .[$lbl] = $inst.pc);
 
-def interpret_inst:
+def interpret_step:
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -192,23 +202,7 @@ def interpret_inst:
     .in = "" | pop
   else inst_error("malformed instruction") end;
 
-def parse:
-  def _parse:
-    if .i < (.src|length) then parse_inst | _parse else . end;
-  {
-    src: explode, # program source
-    i: 0,         # read offset
-    pos: 0,       # instruction start offset
-    tok: "",      # current token
-    prog: [],     # instructions
-  } |
-  _parse | del(.i, .pos, .tok);
-
-def interpret:
-  def _interpret:
-    if type == "string" then . # generate stream of printed strings
-    elif .pc >= (.prog|length) then empty
-    else interpret_inst | _interpret end;
+def interpret_init:
   . * {
     labels: label_map,
     pc: 0,  # program counter
@@ -217,7 +211,57 @@ def interpret:
     c: [],  # call stack
     h: {},  # heap
     in: "", # stdin
-  } |
-  _interpret;
+  };
+def interpret_continue:
+  if type == "string" then . # generate stream of printed strings
+  elif .pc >= (.prog|length) then empty
+  else interpret_step | interpret_continue end;
+def interpret_next($depth):
+  if $depth < 0 or type == "string" then .
+  else .prog[.pc].typ as $typ | interpret_step |
+    if $typ == "call" then interpret_next($depth+1)
+    elif $typ == "ret" then interpret_next($depth-1)
+    else interpret_next($depth) end
+  end;
+def interpret: interpret_init | interpret_continue;
 
-$src | parse | interpret
+def interpret_exit_status:
+  if .prog[.pc].typ == "end"
+  then "(interpreter exited cleanly)\n"
+  else "(interpreter exited implicitly)\n" end;
+
+def debug:
+  def help:
+    "Debugger commands:\n"
+    + "  r, run        -- Launch or restart the program.\n"
+    + "  c, continue   -- Continue from the current instruction.\n"
+    + "  s, step       -- Execute next instruction, stepping into calls.\n"
+    + "  n, next       -- Execute next instruction, stepping over calls.\n"
+    + "  b, breakpoint -- Set or clear a breakpoint.\n"
+    + "  q, quit       -- Quit the debugger.\n"
+    + "  h, help       -- Show a list of all debugger commands.\n";
+  def iscmd($cmd): . == $cmd or . == $cmd[:1];
+  def breakpoint: "Not implemented\n"; # TODO
+  def _debug:
+    "(wsjq) ",
+    ((try input
+      catch if . == "break" then "q" else error end) as $cmd |
+    (if $cmd == "" then .prev_cmd else $cmd end) as $cmd |
+    if   $cmd|iscmd("run")        then interpret
+    elif $cmd|iscmd("continue")   then interpret_continue
+    elif $cmd|iscmd("step")       then "step\n", interpret_step
+    elif $cmd|iscmd("next")       then "next\n", interpret_next(0)
+    elif $cmd|iscmd("breakpoint") then breakpoint
+    elif $cmd|iscmd("quit")       then .
+    elif $cmd|iscmd("help")       then help
+    elif $cmd == ""               then .
+    else "\($cmd|tojson) is not a valid command.\n", . end |
+    if type == "string" or $cmd[:1] == "q" then .
+    else _debug end);
+  . * {
+    breakpoints: {},
+    prev_cmd: "",
+  } |
+  interpret_init | _debug;
+
+$src | parse | debug
