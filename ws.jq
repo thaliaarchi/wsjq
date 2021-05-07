@@ -4,43 +4,57 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-def inststr:
+def inst_str:
   if .arg != null then "\(.typ) \(.arg)" else .typ end;
-def instasm:
+def inst_asm:
   if .typ == "label" then "\(.arg):"
-  else "    \(inststr)" end;
-def instasmpos($mark):
-  "\(.pos)" + if $mark then "#" else "-" end + " \(instasm)";
+  else "    \(inst_str)" end;
+def inst_asm_pos($mark):
+  "\(.pos)" + if $mark then "#" else "-" end
+  + if .typ != null then " \(inst_asm)" else "" end;
 
+def prog_with_eof:
+  if .i != null and .i < (.src|length) then .
+  else .prog + [{pos:(.src|length)}] end;
 def prog_entries:
-  .prog | to_entries | map(.value * {pc:.key});
+  to_entries | map(.value * {pc:.key});
 
 def disasm:
-  [.prog[] | instasm | . + "\n"] | join("");
-def disasmpos:
-  .prog | map(instasmpos(false) + "\n") | join("");
+  [.prog[] | inst_asm + "\n"] | join("");
+def disasm_pos:
+  [prog_with_eof[] | inst_asm_pos(false) + "\n"] | join("");
 def trace($pc; $n):
-  prog_entries |
+  prog_with_eof | prog_entries |
   if $pc < $n then .[:$pc+$n+1]
   else .[$pc-$n:$pc+$n+1] end |
-  map(instasmpos(.pc == $pc) + "\n") | join("");
+  map(inst_asm_pos(.pc == $pc) + "\n") | join("");
 
+def _error($msg; $inst; $pc):
+  "Error: \($msg)"
+  + if $inst.pos != null then " at offset \($inst.pos)" else "" end
+  + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
+  + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end |
+  halt_error(1);
 def inst_error($msg; $inst):
-  "Error: \($msg) at offset \($inst.pos)"
-  + if $inst != null then ": \($inst | inststr)" else "" end
-  + "\n\n"
-  + trace(.pc-1 // (.prog|length); 5) | halt_error(1);
+  (.pc0 // .prog|length) as $pc |
+  ($inst // .prog[$pc]) as $inst |
+  _error($msg; $inst; $pc);
+
+def inst_error($msg): inst_error($msg; null);
+def assert($cond; msg; inst):
+  if $cond then . else inst_error(msg; inst) end;
+def assert($cond; msg): assert($cond; msg; null);
 
 def match_inst(s; t; l; eof):
   .src[.i] as $ch | .i+=1 |
-  if   $ch == 32 then .tok += "S" | s # space
-  elif $ch == 9  then .tok += "T" | t # tab
-  elif $ch == 10 then .tok += "L" | l # lf
+  if   $ch == 32 then .tok += "[Space]" | s
+  elif $ch == 9  then .tok += "[Tab]"   | t
+  elif $ch == 10 then .tok += "[LF]"    | l
   elif .i >= (.src|length) then eof
   else match_inst(s; t; l; eof) end;
 def match_inst(s; t; l):
   match_inst(s; t; l;
-    inst_error("unexpected EOF"; {typ:.tok, pos:(.i-1)}));
+    inst_error("unexpected EOF"; {typ:(.tok+"[EOF]"), pos:(.i-1)}));
 
 def parse_inst:
   def parse_num:
@@ -118,32 +132,39 @@ def parse_inst:
     .);
 
 def label_map:
-  reduce (prog_entries[] | select(.typ == "label")) as $inst
+  reduce (.prog | prog_entries[] | select(.typ == "label")) as $inst
     ({}; ($inst.arg|tostring) as $lbl |
-      if .[$lbl] == null then .[$lbl] = $inst.pc
-      else inst_error("label redefined"; $inst) end);
+      assert(.[$lbl] == null; "label redefined"; $inst) |
+      .[$lbl] = $inst.pc);
 
 def interpret_inst:
+  def assert_len($n): assert(.s|length >= $n; "stack underflow");
+  def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
-  def pop: .s |= .[:-1];
-  def top: .s[-1];
-  def top2: .s[-2];
+  def pop: assert_len(1) | .s |= .[:-1];
+  def at($n): assert_len($n) | .s[-$n-1];
+  def top: at(0);
+  def top2: at(1);
   def jmp($l): .pc = .labels[$l|tostring];
   def store($addr; $val): .h[$addr|tostring] = $val;
-  def read: if .in == "" then .in = input else . end;
+  def read_line:
+    if .in != "" then .
+    else
+      . as $state |
+      try (.in = input + "\n")
+      catch if . == "break" then $state|inst_error("EOF") else error end
+    end;
 
-  if .pc < (.prog|length) then .
-  else inst_error("interpreter stopped"; null) end |
-
+  assert(.pc < (.prog|length); "interpreter stopped") |
   .prog[.pc] as $inst |
   $inst as {typ:$t, arg:$n} |
-  .pc += 1 |
+  .pc0 = .pc | .pc += 1 |
   if   $t == "push"     then push($n)
   elif $t == "dup"      then push(top)
-  elif $t == "copy"     then push(.s[-$n-1])
+  elif $t == "copy"     then push(at($n))
   elif $t == "swap"     then .s = .s[:-2] + [top, top2]
   elif $t == "drop"     then pop
-  elif $t == "slide"    then .s = .s[:-$n-1] + [top]
+  elif $t == "slide"    then assert_len($n) | .s = .s[:-$n-1] + [top]
   elif $t == "add"      then top2 += top | pop
   elif $t == "sub"      then top2 -= top | pop
   elif $t == "mul"      then top2 *= top | pop
@@ -156,20 +177,20 @@ def interpret_inst:
   elif $t == "jmp"      then jmp($n)
   elif $t == "jz"       then if top == 0 then jmp($n) else . end | pop
   elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
-  elif $t == "ret"      then .pc = .c[-1] | .c |= .[:-1]
+  elif $t == "ret"      then assert_ret | .pc = .c[-1] | .c |= .[:-1]
   elif $t == "end"      then .pc = (.prog|length)
   elif $t == "printc"   then ([top] | implode), pop
   elif $t == "printi"   then (top | tostring), pop
   elif $t == "readc"    then
-    read | store(top; (.in|explode)[0] // 0) |
-    .in |= ((explode)[1:]|implode) | pop
+    read_line | store(top; (.in|explode)[0] // 0) |
+    .in |= (explode[1:]|implode) | pop
   elif $t == "readi"    then
-    read |
-    if .in | test("^\\s*[+-]?\\d+\\s*$"; "") then .
-    else inst_error("invalid integer"; $inst) end |
+    read_line |
+    assert(.in | test("^\\s*[+-]?\\d+\\s*$");
+      "invalid integer " + (.in | rtrimstr("\n") | tojson)) |
     store(top; .in|tonumber // 0) |
     .in = "" | pop
-  else inst_error("malformed instruction"; $inst) end;
+  else inst_error("malformed instruction") end;
 
 def parse:
   def _parse:
@@ -191,6 +212,7 @@ def interpret:
   . * {
     labels: label_map,
     pc: 0,  # program counter
+    pc0: 0, # previous program counter
     s: [],  # data stack
     c: [],  # call stack
     h: {},  # heap

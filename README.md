@@ -1,6 +1,6 @@
-# ws.jq — Whitespace interpreter written in jq
+# wsjq — Whitespace interpreter written in jq
 
-ws.jq is an interpreter for the Whitespace programming language written
+wsjq is an interpreter for the Whitespace programming language written
 in jq.
 
 ## Usage
