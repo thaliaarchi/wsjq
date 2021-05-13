@@ -221,12 +221,12 @@ def interpret_init:
     in: "", # stdin
   };
 def interpret_continue(step):
-  if type == "string" then . # generate stream of printed strings
-  elif .pc >= (.prog|length) then empty
+  if type != "object" or .pc >= (.prog|length) then .
   else step | interpret_continue(step) end;
 def interpret_next($depth; step):
-  if $depth < 0 or type == "string" then .
-  else .prog[.pc].typ as $typ | step |
+  if $depth < 0 or type != "object" or .pc >= (.prog|length) then .
+  else
+    .prog[.pc].typ as $typ | step |
     if $typ == "call" then interpret_next($depth+1; step)
     elif $typ == "ret" then interpret_next($depth-1; step)
     else interpret_next($depth; step) end
@@ -235,17 +235,18 @@ def interpret_next(step): interpret_next(0; step);
 def interpret(step): interpret_init | interpret_continue(step);
 def interpret: interpret(interpret_step);
 
-def interpret_exit_status:
-  (if type == "string" or .pc < (.prog|length) then empty else
+def print_exit_status:
+  if type != "object" or .pc < (.prog|length) then empty
+  else
     if .prog[.pc0].typ == "end"
     then "[program exited cleanly]\n"
     else "[program exited implicitly]\n" end
-  end, .);
+  end, .;
 
 def debug:
   def help:
     "Debugger commands:\n"
-    + "  r, run         -- Launch or restart the program.\n"
+    + "  r, run         -- Run or restart the program from the start.\n"
     + "  c, continue    -- Continue from the current instruction.\n"
     + "  s, step        -- Execute next instruction, stepping into calls.\n"
     + "  n, next        -- Execute next instruction, stepping over calls.\n"
@@ -254,8 +255,9 @@ def debug:
     + "  q, quit        -- Quit the debugger.\n"
     + "  h, help        -- Show a list of all debugger commands.\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
-  def step: interpret_step_debug | interpret_exit_status;
-  def stepd: interpret_step | interpret_exit_status;
+  def step: interpret_step | print_exit_status;
+  def step_dbg: interpret_step_debug | print_exit_status;
+  def next: interpret_next(step_dbg);
   def breakpoint: "Not implemented\n"; # TODO
   def _debug:
     "(wsjq) ",
@@ -263,17 +265,17 @@ def debug:
       catch if . == "break" then "q" else error end) as $cmd |
     (if $cmd == "" then .prev_cmd else $cmd end) as $cmd |
     .prev_cmd = "" |
-    if   $cmd|iscmd("run")         then interpret(step), .
+    if   $cmd|iscmd("run")         then interpret(step)
     elif $cmd|iscmd("continue")    then interpret_continue(step)
-    elif $cmd|iscmd("step")        then .prev_cmd = $cmd | stepd
-    elif $cmd|iscmd("next")        then .prev_cmd = $cmd | interpret_next(stepd)
+    elif $cmd|iscmd("step")        then .prev_cmd = $cmd | step_dbg
+    elif $cmd|iscmd("next")        then .prev_cmd = $cmd | next
     elif $cmd|iscmd("disassemble") then disasm_pos, .
     elif $cmd|iscmd("breakpoint")  then breakpoint
     elif $cmd|iscmd("quit")        then .
     elif $cmd|iscmd("help")        then help
     elif $cmd == ""                then .
     else "\($cmd|tojson) is not a valid command.\n", . end |
-    if type == "string" or $cmd[:1] == "q" then .
+    if type != "object" or $cmd[:1] == "q" then .
     else _debug end);
   . * {
     breakpoints: {},
