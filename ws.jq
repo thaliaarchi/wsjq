@@ -58,29 +58,41 @@ def match_inst(s; t; l):
 def parse_inst:
   def parse_num:
     match_inst(
-      .arg*=2 | parse_num;           # 0 digit
-      .arg*=2 | .arg+=1 | parse_num; # 1 digit
-      .);                            # done
-  def inst_num($typ; $signed):
-    .arg = 0 |
-    if $signed then match_inst(parse_num; parse_num | .arg*=-1; .)
-    else parse_num end |
-    .prog += [{typ:$typ, arg, pos}] | del(.arg);
+      .n*=2 | parse_num;         # 0 digit
+      .n*=2 | .n+=1 | parse_num; # 1 digit
+      .);                        # done
+  def parse_lbl:
+    def digit($d): .n*=2 | .n+=$d | .l+=[$d] | parse_lbl;
+    match_inst(digit(0); digit(1); .);
+  def lbl_str:
+    .n as $n | .l |
+    if length%8 == 0 and length > 0 then
+      [range(0;length;8) as $i |
+        reduce .[$i:$i+8][] as $d (0; .*2 + $d)] |
+      # visible ASCII that doesn't start with %
+      if all(33 <= . and . <= 126) and .[0] != 37
+      then implode else $n end
+    else $n end |
+    if type == "number" then "%\(.)" else . end;
 
   def inst($typ): .prog += [{typ:$typ, pos}];
-  def inst_arg($typ): inst_num($typ; true);
-  def inst_lbl($typ): inst_num($typ; false);
+  def inst_num($typ):
+    .n = 0 | match_inst(parse_num; parse_num | .n*=-1; .) |
+    .prog += [{typ:$typ, arg:.n, pos}] | del(.n);
+  def inst_lbl($typ):
+    .n = 0 | .l = [] | parse_lbl |
+    .prog += [{typ:$typ, arg:lbl_str, pos}] | del(.n, .l);
   def inst_err: inst_error("unrecognized instruction"; {typ:.tok, pos});
 
   .pos = .i | .tok = "" |
   match_inst(
     # Stack
     match_inst(
-      inst_arg("push");     # SS  n push
+      inst_num("push");     # SS  n push
       match_inst(
-        inst_arg("copy");   # STS n copy
+        inst_num("copy");   # STS n copy
         inst_err;
-        inst_arg("slide")); # STL n slide
+        inst_num("slide")); # STL n slide
       match_inst(
         inst("dup");        # SLS   dup
         inst("swap");       # SLT   swap
@@ -158,8 +170,9 @@ def interpret_step(before; format_print; read_prefix):
   def at($n): assert_len($n) | .s[-$n-1];
   def top: at(0);
   def top2: at(1);
-  def jmp($l): .pc = .labels[$l|tostring];
   def store($addr; $val): .h[$addr|tostring] = $val;
+  def jmp($l):
+    assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
   def read_line:
     assert_len(1) |
     if .in != "" then .

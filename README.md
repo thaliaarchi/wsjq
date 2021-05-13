@@ -5,9 +5,12 @@ in jq.
 
 ## Usage
 
-```sh
-./wsjq <file>
-```
+    wsjq [<mode>] <file>
+
+      run    -- Run the program (default)
+      debug  -- Run the program in the debugger
+      disasm -- Disassemble the program
+      help   -- Show usage
 
 ## License
 
