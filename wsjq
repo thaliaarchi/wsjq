@@ -5,8 +5,28 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-if [ $# -ne 1 ]; then
-  echo "usage: $0 <file>" && exit 2
+USAGE="usage: $0 [<mode>] <file>
+
+  run    -- Run the program (default)
+  debug  -- Run the program in the debugger
+  disasm -- Disassemble the program
+  help   -- Show usage
+"
+
+if [ "$1" = help ] || [ "$1" = -h ] || [ "$1" = "--help" ]; then
+  echo -n "$USAGE" && exit
+fi
+if [ $# -eq 1 ]; then
+  mode="run"
+  file="$1"
+elif [ $# -eq 2 ]; then
+  mode="$1"
+  file="$2"
+else
+  echo -n "$USAGE" && exit 2
 fi
 
-jq -njMR --rawfile src "$1" -f ws.jq
+jq -njMR \
+  --arg mode "$mode" \
+  --rawfile src "$file" \
+  -f main.jq

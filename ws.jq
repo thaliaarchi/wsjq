@@ -246,14 +246,14 @@ def print_exit_status:
 def debug:
   def help:
     "Debugger commands:\n"
-    + "  r, run         -- Run or restart the program from the start.\n"
-    + "  c, continue    -- Continue from the current instruction.\n"
-    + "  s, step        -- Execute next instruction, stepping into calls.\n"
-    + "  n, next        -- Execute next instruction, stepping over calls.\n"
-    + "  b, breakpoint  -- Set or clear a breakpoint.\n"
-    + "  d, disassemble -- Disassemble program.\n"
-    + "  q, quit        -- Quit the debugger.\n"
-    + "  h, help        -- Show a list of all debugger commands.\n";
+    + "  r, run         -- Run or restart the program from the start\n"
+    + "  c, continue    -- Continue from the current instruction\n"
+    + "  s, step        -- Execute next instruction, stepping into calls\n"
+    + "  n, next        -- Execute next instruction, stepping over calls\n"
+    + "  b, breakpoint  -- Set or clear a breakpoint\n"
+    + "  d, disassemble -- Disassemble program\n"
+    + "  q, quit        -- Quit the debugger\n"
+    + "  h, help        -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def step: interpret_step | print_exit_status;
   def step_dbg: interpret_step_debug | print_exit_status;
@@ -274,7 +274,7 @@ def debug:
     elif $cmd|iscmd("quit")        then .
     elif $cmd|iscmd("help")        then help
     elif $cmd == ""                then .
-    else "\($cmd|tojson) is not a valid command.\n", . end |
+    else "\($cmd|tojson) is not a valid command\n", . end |
     if type != "object" or $cmd[:1] == "q" then .
     else _debug end);
   . * {
@@ -282,5 +282,3 @@ def debug:
     prev_cmd: "",
   } |
   interpret_init | _debug;
-
-$src | parse | debug | select(type == "string")
