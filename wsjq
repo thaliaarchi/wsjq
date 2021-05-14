@@ -5,6 +5,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+
 USAGE="usage: $0 [<mode>] <file>
 
   run    -- Run the program (default)
@@ -29,4 +31,5 @@ fi
 jq -njMR \
   --arg mode "$mode" \
   --rawfile src "$file" \
-  -f main.jq
+  -L "$SCRIPT_DIR" \
+  -f "$SCRIPT_DIR/main.jq"
