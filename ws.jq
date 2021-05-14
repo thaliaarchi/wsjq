@@ -9,9 +9,10 @@ def inst_str:
 def inst_asm:
   if .typ == "label" then "\(.arg):"
   else "    \(inst_str)" end;
-def inst_asm_pos($mark):
+def inst_asm_pos($mark; $w):
   "\(.pos)" + if $mark then "#" else "-" end
-  + if .typ != null then " \(inst_asm)" else "" end;
+  + if .typ == null then ""
+    else " " * ($w+1 - (.pos|tostring|length)) + inst_asm end;
 
 def prog_with_eof:
   if .i != null and .i < (.src|length) then .
@@ -21,13 +22,15 @@ def prog_entries:
 
 def disasm:
   [.prog[] | inst_asm + "\n"] | join("");
-def disasm_pos:
-  [prog_with_eof[] | inst_asm_pos(false) + "\n"] | join("");
+def _disasm_pos(mark):
+  (last.pos|tostring|length) as $w |
+  map(inst_asm_pos(mark; $w) + "\n") | join("");
+def disasm_pos: prog_with_eof | _disasm_pos(false);
 def trace($pc; $n):
   prog_with_eof | prog_entries |
   if $pc < $n then .[:$pc+$n+1]
   else .[$pc-$n:$pc+$n+1] end |
-  map(inst_asm_pos(.pc == $pc) + "\n") | join("");
+  _disasm_pos(.pc == $pc);
 
 def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
@@ -220,7 +223,7 @@ def interpret_step(before; format_print; read_prefix):
 def interpret_step: interpret_step(empty; tostring; empty);
 def interpret_step_debug:
   interpret_step(
-    inst_asm_pos(false) + "\n";
+    inst_asm_pos(false; .src|length) + "\n";
     "print> \(tojson)\n";
     "read< ");
 
