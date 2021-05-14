@@ -14,6 +14,12 @@ def inst_asm_pos($mark; $w):
   + if .typ == null then ""
     else " " * ($w+1 - (.pos|tostring|length)) + inst_asm end;
 
+def inst_line($pos):
+  .lines |
+  bsearch($pos) as $i |
+  (if $i < 0 then -(2+$i) else $i end) as $i |
+  "\($i+1):\($pos-.[$i]+1)";
+
 def prog_with_eof:
   if .i != null and .i < (.src|length) then .
   else .prog + [{pos:(.src|length)}] end;
@@ -36,7 +42,8 @@ def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
   ($inst // .prog[$pc]) as $inst |
   "Error: \($msg)"
-  + if $inst.pos != null then " at offset \($inst.pos)" else "" end
+  + if $inst.pos != null then
+      " at \(inst_line($inst.pos)) (offset \($inst.pos))" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
   + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end |
   halt_error(1);
@@ -47,26 +54,26 @@ def assert($cond; msg; inst):
   if $cond then . else inst_error(msg; inst) end;
 def assert($cond; msg): assert($cond; msg; null);
 
-def match_inst(s; t; l; eof):
+def match_char(s; t; l; eof):
   .src[.i] as $ch | .i+=1 |
   if   $ch == 32 then .tok += "[Space]" | s
   elif $ch == 9  then .tok += "[Tab]"   | t
-  elif $ch == 10 then .tok += "[LF]"    | l
+  elif $ch == 10 then .tok += "[LF]"    | .lines += [.i] | l
   elif .i >= (.src|length) then eof
-  else match_inst(s; t; l; eof) end;
-def match_inst(s; t; l):
-  match_inst(s; t; l;
+  else match_char(s; t; l; eof) end;
+def match_char(s; t; l):
+  match_char(s; t; l;
     inst_error("unexpected EOF"; {typ:(.tok+"[EOF]"), pos:(.i-1)}));
 
 def parse_inst:
   def parse_num:
-    match_inst(
+    match_char(
       .n*=2 | parse_num;         # 0 digit
       .n*=2 | .n+=1 | parse_num; # 1 digit
       .);                        # done
   def parse_lbl:
     def digit($d): .n*=2 | .n+=$d | .l+=[$d] | parse_lbl;
-    match_inst(digit(0); digit(1); .);
+    match_char(digit(0); digit(1); .);
   def lbl_str:
     .n as $n | .l |
     if length%8 == 0 and length > 0 then
@@ -80,7 +87,7 @@ def parse_inst:
 
   def inst($typ): .prog += [{typ:$typ, pos}];
   def inst_num($typ):
-    .n = 0 | match_inst(parse_num; parse_num | .n*=-1; .) |
+    .n = 0 | match_char(parse_num; parse_num | .n*=-1; .) |
     .prog += [{typ:$typ, arg:.n, pos}] | del(.n);
   def inst_lbl($typ):
     .n = 0 | .l = [] | parse_lbl |
@@ -88,57 +95,57 @@ def parse_inst:
   def inst_err: inst_error("unrecognized instruction"; {typ:.tok, pos});
 
   .pos = .i | .tok = "" |
-  match_inst(
+  match_char(
     # Stack
-    match_inst(
+    match_char(
       inst_num("push");     # SS  n push
-      match_inst(
+      match_char(
         inst_num("copy");   # STS n copy
         inst_err;
         inst_num("slide")); # STL n slide
-      match_inst(
+      match_char(
         inst("dup");        # SLS   dup
         inst("swap");       # SLT   swap
         inst("drop")));     # SLL   drop
-    match_inst(
+    match_char(
       # Arithmetic
-      match_inst(
-        match_inst(
+      match_char(
+        match_char(
           inst("add");      # TSSS  add
           inst("sub");      # TSST  sub
           inst("mul"));     # TSSL  mul
-        match_inst(
+        match_char(
           inst("div");      # TSTS  div
           inst("mod");      # TSTT  mod
           inst_err);
         inst_err);
       # Heap
-      match_inst(
+      match_char(
         inst("store");      # TTS   store
         inst("retrieve");   # TTT   retrieve
         inst_err);
       # I/O
-      match_inst(
-        match_inst(
+      match_char(
+        match_char(
           inst("printc");   # TLSS  printc
           inst("printi");   # TLST  printi
           inst_err);
-        match_inst(
+        match_char(
           inst("readc");    # TLTS  readc
           inst("readi");    # TLTT  readi
           inst_err);
         inst_err));
     # Control flow
-    match_inst(
-      match_inst(
+    match_char(
+      match_char(
         inst_lbl("label");  # LSS l label
         inst_lbl("call");   # LST l call
         inst_lbl("jmp"));   # LSL l jmp
-      match_inst(
+      match_char(
         inst_lbl("jz");     # LTS l jz
         inst_lbl("jn");     # LTT l jn
         inst("ret"));       # LTL   ret
-      match_inst(
+      match_char(
         inst_err;
         inst_err;
         inst("end"));       # LLL   end
@@ -157,6 +164,7 @@ def parse:
     i: 0,         # read offset
     pos: 0,       # instruction start offset
     tok: "",      # current token
+    lines: [0],   # offsets of lines
     prog: [],     # instructions
   } |
   def _parse:
