@@ -31,12 +31,19 @@ def disasm:
 def _disasm_pos(mark):
   (last.pos|tostring|length) as $w |
   map(inst_asm_pos(mark; $w) + "\n") | join("");
-def disasm_pos: prog_with_eof | _disasm_pos(false);
+def disasm_pos(mark):
+  prog_with_eof | prog_entries | _disasm_pos(mark);
+def disasm_pos: disasm_pos(false);
 def trace($pc; $n):
   prog_with_eof | prog_entries |
   if $pc < $n then .[:$pc+$n+1]
   else .[$pc-$n:$pc+$n+1] end |
   _disasm_pos(.pc == $pc);
+def dump_state:
+  ([.c[] as $c | .prog[$c-1].arg] | join(",")) as $c |
+  "Stack: \(.s)\n" +
+  "Calls: [\($c)]\n" +
+  "Heap:  \(.h)\n";
 
 def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
@@ -194,9 +201,9 @@ def interpret_step(before; format_print; read_prefix):
     end;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
+  before,
   .prog[.pc] as $inst | $inst as {typ:$t, arg:$n} |
   .pc0 = .pc | .pc += 1 |
-  ($inst | before),
   (if  $t == "push"     then push($n)
   elif $t == "dup"      then push(top)
   elif $t == "copy"     then push(at($n))
@@ -206,7 +213,7 @@ def interpret_step(before; format_print; read_prefix):
   elif $t == "add"      then top2 += top | pop
   elif $t == "sub"      then top2 -= top | pop
   elif $t == "mul"      then top2 *= top | pop
-  elif $t == "div"      then top2 /= top | pop
+  elif $t == "div"      then top2 = (top2 / top | floor) | pop
   elif $t == "mod"      then top2 %= top | pop
   elif $t == "store"    then store(top2; top) | pop | pop
   elif $t == "retrieve" then top = .h[top|tostring] // 0
@@ -231,7 +238,8 @@ def interpret_step(before; format_print; read_prefix):
 def interpret_step: interpret_step(empty; tostring; empty);
 def interpret_step_debug:
   interpret_step(
-    inst_asm_pos(false; .src|length) + "\n";
+    (.src|length|tostring|length) as $w |
+    .prog[.pc] | inst_asm_pos(false; $w) + "\n";
     "print> \(tojson)\n";
     "read< ");
 
@@ -274,27 +282,28 @@ def debug:
     + "  c, continue    -- Continue from the current instruction\n"
     + "  s, step        -- Execute next instruction, stepping into calls\n"
     + "  n, next        -- Execute next instruction, stepping over calls\n"
-    + "  b, breakpoint  -- Set or clear a breakpoint\n"
+    # + "  b, breakpoint  -- Set or clear a breakpoint\n"
     + "  d, disassemble -- Disassemble program\n"
+    + "  p, print       -- Dump the data stack, call stack, and heap\n"
     + "  q, quit        -- Quit the debugger\n"
     + "  h, help        -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def step: interpret_step | print_exit_status;
   def step_dbg: interpret_step_debug | print_exit_status;
   def next: interpret_next(step_dbg);
-  def breakpoint: "Not implemented\n"; # TODO
   def _debug:
     "(wsjq) ",
     ((try input
       catch if . == "break" then "q" else error end) as $cmd |
-    (if $cmd == "" then .prev_cmd else $cmd end) as $cmd |
-    .prev_cmd = "" |
+    (if $cmd == "" then .cmd0 else $cmd end) as $cmd |
+    .cmd0 = "" |
     if   $cmd|iscmd("run")         then interpret(step)
     elif $cmd|iscmd("continue")    then interpret_continue(step)
-    elif $cmd|iscmd("step")        then .prev_cmd = $cmd | step_dbg
-    elif $cmd|iscmd("next")        then .prev_cmd = $cmd | next
-    elif $cmd|iscmd("disassemble") then disasm_pos, .
-    elif $cmd|iscmd("breakpoint")  then breakpoint
+    elif $cmd|iscmd("step")        then .cmd0 = $cmd | step_dbg
+    elif $cmd|iscmd("next")        then .cmd0 = $cmd | next
+    elif $cmd|iscmd("disassemble") then .pc as $pc | disasm_pos(.pc == $pc), .
+    # elif $cmd|iscmd("breakpoint")  then breakpoint
+    elif $cmd|iscmd("print")       then dump_state, .
     elif $cmd|iscmd("quit")        then .
     elif $cmd|iscmd("help")        then help
     elif $cmd == ""                then .
@@ -302,7 +311,8 @@ def debug:
     if type != "object" or $cmd[:1] == "q" then .
     else _debug end);
   . * {
-    breakpoints: {},
-    prev_cmd: "",
+    cmd: "",  # debug command
+    cmd0: "", # previous debug command
+    # breakpoints: {},
   } |
   interpret_init | _debug;
