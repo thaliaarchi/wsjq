@@ -52,7 +52,8 @@ def inst_error($msg; $inst; $pc):
   + if $inst.pos != null then
       " at \(inst_line($inst.pos)) (offset \($inst.pos))" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
-  + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end |
+  + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end
+  + if .pc!=null then "\n" + dump_state else "" end |
   halt_error(1);
 def inst_error($msg; $inst): inst_error($msg; $inst; $inst.pc);
 def inst_error($msg): inst_error($msg; null);
