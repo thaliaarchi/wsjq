@@ -257,12 +257,14 @@ def interpret_continue(step):
   if type != "object" or .pc >= (.prog|length) then .
   else step | interpret_continue(step) end;
 def interpret_next($depth; step):
-  if $depth < 0 or type != "object" or .pc >= (.prog|length) then .
+  step |
+  if type != "object" or .pc >= (.prog|length) then .
   else
-    .prog[.pc].typ as $typ | step |
-    if $typ == "call" then interpret_next($depth+1; step)
-    elif $typ == "ret" then interpret_next($depth-1; step)
-    else interpret_next($depth; step) end
+    .prog[.pc0].typ as $typ |
+    (if $typ == "call" then $depth+1
+      elif $typ == "ret" then $depth-1
+      else $depth end) as $depth |
+    if $depth > 0 then interpret_next($depth; step) else . end
   end;
 def interpret_next(step): interpret_next(0; step);
 def interpret(step): interpret_init | interpret_continue(step);
