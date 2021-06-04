@@ -10,9 +10,12 @@ def inst_asm:
   if .typ == "label" then "\(.arg):"
   else "    \(inst_str)" end;
 def inst_asm_pos($mark; $w):
-  "\(.pos)" + if $mark then "#" else "-" end
-  + if .typ == null then ""
-    else " " * ($w+1 - (.pos|tostring|length)) + inst_asm end;
+  "\(.pos)" + if $mark then "#" else "-" end +
+  if .typ == null then ""
+  else
+    ([$w - (.pos|tostring|length), 0] | max + 1) as $w |
+    " " * $w + inst_asm
+  end;
 
 def inst_line($pos):
   .lines |
@@ -40,10 +43,12 @@ def trace($pc; $n):
   else .[$pc-$n:$pc+$n+1] end |
   _disasm_pos(.pc == $pc);
 def dump_state:
-  ([.c[] as $c | .prog[$c-1].arg] | join(",")) as $c |
-  "Stack: \(.s)\n" +
-  "Calls: [\($c)]\n" +
-  "Heap:  \(.h)\n";
+  def stack: .s | join(", ");
+  def calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
+  def heap: [(.h | keys[]) as $k | "\($k):\(.h[$k])"] | join(", ");
+  "Stack: [\(stack)]\n" +
+  "Calls: [\(calls)]\n" +
+  "Heap:  {\(heap)}\n";
 
 def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
@@ -267,18 +272,20 @@ def interpret_init:
     in: "", # stdin
   };
 
+def _break:
+  type != "object" or .pc >= (.prog|length) or .breaks[.pc|tostring]?;
 def interpret_continue:
-  # Continue loops are duplicated to remove recursive parameters and
-  # enable tail-call optimization.
-  if type != "object" or .pc >= (.prog|length) then .
+  # If parameters are recursively passed to interpret_contine, jq does
+  # not detect the tail call nor perform tail-call optimization.
+  if _break then .
   else interpret_step | interpret_continue end;
 def interpret_continue_debug:
-  if type != "object" or .pc >= (.prog|length) then .
+  if _break then .
   else interpret_step_debug | interpret_continue_debug end;
 
 def _interpret_next($verbose; $depth):
   if $verbose then interpret_step_debug else interpret_step end |
-  if type != "object" or .pc >= (.prog|length) then .
+  if _break then .
   else
     .prog[.pc0].typ as $typ |
     (if $typ == "call" then $depth+1
@@ -298,7 +305,7 @@ def debug:
     + "  c, continue    -- Continue from the current instruction\n"
     + "  s, step        -- Execute next instruction, stepping into calls\n"
     + "  n, next        -- Execute next instruction, stepping over calls\n"
-    # + "  b, breakpoint  -- Set or clear a breakpoint\n"
+    + "  b, breakpoint  -- Set or clear a breakpoint\n"
     + "  d, disasm      -- Disassemble program\n"
     + "  p, print       -- Dump the data stack, call stack, and heap\n"
     + "  q, quit        -- Quit the debugger\n"
@@ -307,7 +314,15 @@ def debug:
   def run:
     if .pc > 0 then "[interpreter restarted]\n", interpret_init
     else interpret_init | interpret_continue_debug end;
-  def breakpoint: "[breakpoints not implemented]\n", .;
+  def breakpoint($locs):
+    if $locs|length == 0 then
+      .prog[.breaks | keys[] | tonumber] | inst_asm_pos(false; 0) + "\n"
+    else
+      $locs[] as $l |
+      if .breaks|has($l) then .breaks[$l] |= not
+      elif .labels|has($l) then .breaks[.labels[$l]|tostring] = true
+      else "Label not found: \($l)\n" end
+    end;
   def _debug:
     "(wsjq) ",
     ((try input
@@ -319,11 +334,11 @@ def debug:
     .cmd = "" |
     if   $c == ""               then .
     elif $c|iscmd("run")        then run
-    elif $c|iscmd("continue")   then interpret_continue
+    elif $c|iscmd("continue")   then interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pos(.pc == $pc), .
-    elif $c|iscmd("breakpoint") then breakpoint
+    elif $c|iscmd("breakpoint") then breakpoint($args), .
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
@@ -331,7 +346,7 @@ def debug:
     if type != "object" then .
     else _debug end);
   . + {
-    cmd: "", # previous debug command
-    # breakpoints: {},
+    cmd: "",    # previous debug command
+    breaks: {}, # key: breakpoint pc, value: boolean status
   } |
   interpret_init | _debug;
