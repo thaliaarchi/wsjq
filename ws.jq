@@ -258,7 +258,7 @@ def interpret_step_debug:
   end;
 
 def interpret_init:
-  . * {
+  . + {
     pc: 0,  # program counter
     pc0: 0, # previous program counter
     s: [],  # data stack
@@ -290,7 +290,6 @@ def interpret_next: _interpret_next(false; 0);
 def interpret_next_debug: _interpret_next(true; 0);
 
 def interpret: interpret_init | interpret_continue;
-def interpret_debug: interpret_init | interpret_continue_debug;
 
 def debug:
   def help:
@@ -304,6 +303,9 @@ def debug:
     + "  p, print       -- Dump the data stack, call stack, and heap\n"
     + "  q, quit        -- Quit the debugger\n"
     + "  h, help        -- Show a list of all debugger commands\n";
+  def run:
+    if .pc > 0 then "[interpreter restarted]\n", interpret_init
+    else interpret_init | interpret_continue_debug end;
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def _debug:
     "(wsjq) ",
@@ -311,7 +313,7 @@ def debug:
       catch if . == "break" then "q" else error end) as $cmd |
     (if $cmd == "" then .cmd0 else $cmd end) as $cmd |
     .cmd0 = "" |
-    if   $cmd|iscmd("run")         then interpret_debug
+    if   $cmd|iscmd("run")         then run
     elif $cmd|iscmd("continue")    then interpret_continue
     elif $cmd|iscmd("step")        then .cmd0 = $cmd | interpret_step_debug
     elif $cmd|iscmd("next")        then .cmd0 = $cmd | interpret_next_debug
@@ -324,7 +326,7 @@ def debug:
     else "\($cmd|tojson) is not a valid command\n", . end |
     if type != "object" or $cmd[:1] == "q" then .
     else _debug end);
-  . * {
+  . + {
     cmd: "",  # debug command
     cmd0: "", # previous debug command
     # breakpoints: {},
