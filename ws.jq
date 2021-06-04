@@ -87,7 +87,7 @@ def parse_inst:
     if length%8 == 0 and length > 0 then
       [range(0;length;8) as $i |
         reduce .[$i:$i+8][] as $d (0; .*2 + $d)] |
-      # visible ASCII that doesn't start with %
+      # Label is visible ASCII and doesn't start with %
       if all(33 <= . and . <= 126) and .[0] != 37
       then implode else $n end
     else $n end |
@@ -299,36 +299,39 @@ def debug:
     + "  s, step        -- Execute next instruction, stepping into calls\n"
     + "  n, next        -- Execute next instruction, stepping over calls\n"
     # + "  b, breakpoint  -- Set or clear a breakpoint\n"
-    + "  d, disassemble -- Disassemble program\n"
+    + "  d, disasm      -- Disassemble program\n"
     + "  p, print       -- Dump the data stack, call stack, and heap\n"
     + "  q, quit        -- Quit the debugger\n"
     + "  h, help        -- Show a list of all debugger commands\n";
+  def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def run:
     if .pc > 0 then "[interpreter restarted]\n", interpret_init
     else interpret_init | interpret_continue_debug end;
-  def iscmd($cmd): . == $cmd or . == $cmd[:1];
+  def breakpoint: "[breakpoints not implemented]\n", .;
   def _debug:
     "(wsjq) ",
     ((try input
       catch if . == "break" then "q" else error end) as $cmd |
-    (if $cmd == "" then .cmd0 else $cmd end) as $cmd |
-    .cmd0 = "" |
-    if   $cmd|iscmd("run")         then run
-    elif $cmd|iscmd("continue")    then interpret_continue
-    elif $cmd|iscmd("step")        then .cmd0 = $cmd | interpret_step_debug
-    elif $cmd|iscmd("next")        then .cmd0 = $cmd | interpret_next_debug
-    elif $cmd|iscmd("disassemble") then .pc as $pc | disasm_pos(.pc == $pc), .
-    # elif $cmd|iscmd("breakpoint")  then breakpoint
-    elif $cmd|iscmd("print")       then dump_state, .
-    elif $cmd|iscmd("quit")        then .
-    elif $cmd|iscmd("help")        then help
-    elif $cmd == ""                then .
+    ($cmd | gsub("^\\s+|\\s+$"; "")) as $cmd |
+    (if $cmd == "" then .cmd else $cmd end) as $cmd |
+    ($cmd | split("\\s+"; "")) as $words |
+    ($words[0] // "") as $c | $words[1:] as $args |
+    .cmd = "" |
+    if   $c == ""               then .
+    elif $c|iscmd("run")        then run
+    elif $c|iscmd("continue")   then interpret_continue
+    elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
+    elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
+    elif $c|iscmd("disasm")     then .pc as $pc | disasm_pos(.pc == $pc), .
+    elif $c|iscmd("breakpoint") then breakpoint
+    elif $c|iscmd("print")      then dump_state, .
+    elif $c|iscmd("quit")       then ""
+    elif $c|iscmd("help")       then help, .
     else "\($cmd|tojson) is not a valid command\n", . end |
-    if type != "object" or $cmd[:1] == "q" then .
+    if type != "object" then .
     else _debug end);
   . + {
-    cmd: "",  # debug command
-    cmd0: "", # previous debug command
+    cmd: "", # previous debug command
     # breakpoints: {},
   } |
   interpret_init | _debug;

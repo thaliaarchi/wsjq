@@ -1,7 +1,7 @@
 # wsjq — Whitespace interpreter written in jq
 
-wsjq is an interpreter for the Whitespace programming language written
-in jq.
+wsjq is an interpreter and debugger for the Whitespace programming
+language written in jq.
 
 ## Usage
 
@@ -18,7 +18,7 @@ wsjq has been tested with jq version 1.6.
 
 - Integers have 53 bits of precision because jq uses IEEE 754 float64.
 - div and mod use truncated division, not floor division like Haskell.
-- readc collapses CRLF to LF on Windows because `input`, strips line
+- readc collapses CRLF to LF on Windows because `input` strips line
   endings according to the current OS.
 
 ## License
