@@ -237,12 +237,25 @@ def interpret_step(before; format_print; read_prefix):
     store(top; .in|tonumber) | pop | .in = "")
   else inst_error("malformed instruction") end);
 def interpret_step: interpret_step(empty; tostring; empty);
+
 def interpret_step_debug:
-  interpret_step(
-    (.src|length|tostring|length) as $w |
-    .prog[.pc] | inst_asm_pos(false; $w) + "\n";
-    "print> \(tojson)\n";
-    "read< ");
+  def print_exit_status:
+    if type != "object" or .pc < (.prog|length) then empty
+    else
+      if .prog[.pc0].typ == "end"
+      then "[program exited cleanly]\n"
+      else "[program exited implicitly]\n" end
+    end;
+
+  if .pc >= (.prog|length) then "[interpreter stopped]\n", .
+  else
+    interpret_step(
+      (.src|length|tostring|length) as $w |
+      .prog[.pc] | inst_asm_pos(false; $w) + "\n";
+      "print> \(tojson)\n";
+      "read< ") |
+    print_exit_status, .
+  end;
 
 def interpret_init:
   . * {
@@ -253,30 +266,31 @@ def interpret_init:
     h: {},  # heap
     in: "", # stdin
   };
-def interpret_continue(step):
+
+def interpret_continue:
+  # Continue loops are duplicated to remove recursive parameters and
+  # enable tail-call optimization.
   if type != "object" or .pc >= (.prog|length) then .
-  else step | interpret_continue(step) end;
-def interpret_next($depth; step):
-  step |
+  else interpret_step | interpret_continue end;
+def interpret_continue_debug:
+  if type != "object" or .pc >= (.prog|length) then .
+  else interpret_step_debug | interpret_continue_debug end;
+
+def _interpret_next($verbose; $depth):
+  if $verbose then interpret_step_debug else interpret_step end |
   if type != "object" or .pc >= (.prog|length) then .
   else
     .prog[.pc0].typ as $typ |
     (if $typ == "call" then $depth+1
       elif $typ == "ret" then $depth-1
       else $depth end) as $depth |
-    if $depth > 0 then interpret_next($depth; step) else . end
+    if $depth > 0 then _interpret_next($verbose; $depth) else . end
   end;
-def interpret_next(step): interpret_next(0; step);
-def interpret(step): interpret_init | interpret_continue(step);
-def interpret: interpret(interpret_step);
+def interpret_next: _interpret_next(false; 0);
+def interpret_next_debug: _interpret_next(true; 0);
 
-def print_exit_status:
-  if type != "object" or .pc < (.prog|length) then empty
-  else
-    if .prog[.pc0].typ == "end"
-    then "[program exited cleanly]\n"
-    else "[program exited implicitly]\n" end
-  end, .;
+def interpret: interpret_init | interpret_continue;
+def interpret_debug: interpret_init | interpret_continue_debug;
 
 def debug:
   def help:
@@ -291,19 +305,16 @@ def debug:
     + "  q, quit        -- Quit the debugger\n"
     + "  h, help        -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
-  def step: interpret_step | print_exit_status;
-  def step_dbg: interpret_step_debug | print_exit_status;
-  def next: interpret_next(step_dbg);
   def _debug:
     "(wsjq) ",
     ((try input
       catch if . == "break" then "q" else error end) as $cmd |
     (if $cmd == "" then .cmd0 else $cmd end) as $cmd |
     .cmd0 = "" |
-    if   $cmd|iscmd("run")         then interpret(step)
-    elif $cmd|iscmd("continue")    then interpret_continue(step)
-    elif $cmd|iscmd("step")        then .cmd0 = $cmd | step_dbg
-    elif $cmd|iscmd("next")        then .cmd0 = $cmd | next
+    if   $cmd|iscmd("run")         then interpret_debug
+    elif $cmd|iscmd("continue")    then interpret_continue
+    elif $cmd|iscmd("step")        then .cmd0 = $cmd | interpret_step_debug
+    elif $cmd|iscmd("next")        then .cmd0 = $cmd | interpret_next_debug
     elif $cmd|iscmd("disassemble") then .pc as $pc | disasm_pos(.pc == $pc), .
     # elif $cmd|iscmd("breakpoint")  then breakpoint
     elif $cmd|iscmd("print")       then dump_state, .

@@ -20,8 +20,6 @@ wsjq has been tested with jq version 1.6.
 - div and mod use truncated division, not floor division like Haskell.
 - readc collapses CRLF to LF on Windows because `input`, strips line
   endings according to the current OS.
-- Tail call optimization seems to fail when `interpret_continue` has
-  parameters (either variables or filters) and is significantly slower.
 
 ## License
 
