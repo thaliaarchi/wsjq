@@ -197,14 +197,23 @@ def interpret_step(before; format_print; read_prefix):
   def store($addr; $val): .h[$addr|tostring] = $val;
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
-  def read_line:
+  def read(process):
     assert_len(1) |
-    if .in != "" then .
+    if .in != "" then process
     else
       . as $state |
-      try (.in = input + "\n")
-      catch if . == "break" then $state|inst_error("EOF") else error end
+      try (.in = input + "\n" | process)
+      catch
+        if . != "break" then error
+        elif .on_eof|type == "number" then store(top; .on_eof) | pop
+        else $state|inst_error("EOF") end
     end;
+  def readc:
+    store(top; (.in|explode)[0]) | pop | .in |= .[1:];
+  def readi:
+    assert(.in | test("^\\s*[+-]?\\d+\\s*$");
+      "invalid integer " + (.in | rtrimstr("\n") | tojson)) |
+    store(top; .in|tonumber) | pop | .in = "";
 
   assert(.pc < (.prog|length); "interpreter stopped") |
   before,
@@ -232,14 +241,8 @@ def interpret_step(before; format_print; read_prefix):
   elif $t == "end"      then .pc = (.prog|length)
   elif $t == "printc"   then ([top] | implode | format_print), pop
   elif $t == "printi"   then (top | format_print), pop
-  elif $t == "readc"    then
-    read_prefix, (read_line |
-    store(top; (.in|explode)[0]) | pop | .in |= .[1:])
-  elif $t == "readi"    then
-    read_prefix, (read_line |
-    assert(.in | test("^\\s*[+-]?\\d+\\s*$");
-      "invalid integer " + (.in | rtrimstr("\n") | tojson)) |
-    store(top; .in|tonumber) | pop | .in = "")
+  elif $t == "readc"    then read_prefix, read(readc)
+  elif $t == "readi"    then read_prefix, read(readi)
   else inst_error("malformed instruction") end);
 def interpret_step: interpret_step(empty; tostring; empty);
 
