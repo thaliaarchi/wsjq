@@ -228,7 +228,7 @@ def interpret_step(before; format_print; read_prefix):
   elif $t == "add"      then top2 += top | pop
   elif $t == "sub"      then top2 -= top | pop
   elif $t == "mul"      then top2 *= top | pop
-  elif $t == "div"      then top2 = (top2 / top | floor) | pop
+  elif $t == "div"      then top2 = (top2 / top | trunc) | pop
   elif $t == "mod"      then top2 %= top | pop
   elif $t == "store"    then store(top2; top) | pop | pop
   elif $t == "retrieve" then top = .h[top|tostring] // 0
