@@ -35,7 +35,8 @@ are then bound to the `$src` variable with `--rawfile`.
 ([blog post](https://itchyny.medium.com/json-formatter-written-in-jq-b716c281afd7))
 and [bf.jq](https://github.com/MakeNowJust/bf.jq/blob/master/bf.jq) by
 MakeNowJust are Brainfuck interpreters written in jq, though neither
-support the `,` read operator.
+support the `,` read operator and both display `.` output on program
+termination.
 
 The jq standard library filters defined in
 [builtin.jq](https://github.com/stedolan/jq/blob/master/src/builtin.jq)
