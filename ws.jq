@@ -166,10 +166,11 @@ def parse_inst:
     .);
 
 def label_map:
+  . as $state |
   reduce (.prog | prog_entries[] | select(.typ == "label")) as $inst
-    ({}; ($inst.arg|tostring) as $lbl |
-      assert(.[$lbl] == null; "label redefined"; $inst) |
-      .[$lbl] = $inst.pc);
+    ({}; . as $labels |($inst.arg|tostring) as $lbl |
+      $state | assert($labels[$lbl] == null; "label redefined"; $inst) |
+      $labels | .[$lbl] = $inst.pc);
 
 def parse:
   {
@@ -191,7 +192,7 @@ def interpret_step(before; format_print; read_prefix):
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
   def pop: assert_len(1) | .s |= .[:-1];
-  def at($n): assert_len($n) | .s[-$n-1];
+  def at($n): assert_len($n+1) | .s[-$n-1];
   def top: at(0);
   def top2: at(1);
   def store($addr; $val): .h[$addr|tostring] = $val;
