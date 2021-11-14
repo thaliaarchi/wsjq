@@ -334,10 +334,9 @@ def debug:
     (if $cmd == "" then .cmd else $cmd end) as $cmd |
     ($cmd | split("\\s+"; "")) as $words |
     ($words[0] // "") as $c | $words[1:] as $args |
-    .cmd = "" |
     if   $c == ""               then .
-    elif $c|iscmd("run")        then run
-    elif $c|iscmd("continue")   then interpret_continue_debug
+    elif $c|iscmd("run")        then .cmd = "" | run
+    elif $c|iscmd("continue")   then .cmd = "" | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pos(.pc == $pc), .
