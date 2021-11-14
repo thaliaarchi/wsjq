@@ -1,7 +1,7 @@
-# wsjq — Whitespace interpreter written in jq
+# wsjq — Whitespace interpreter in jq
 
 wsjq is an interpreter and debugger for the Whitespace programming
-language written in jq.
+language, written in jq.
 
 ## Usage
 

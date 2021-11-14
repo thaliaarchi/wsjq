@@ -231,7 +231,7 @@ def interpret_step(before; format_print; read_prefix):
   elif $t == "div"      then top2 = (top2 / top | trunc) | pop
   elif $t == "mod"      then top2 %= top | pop
   elif $t == "store"    then store(top2; top) | pop | pop
-  elif $t == "retrieve" then top = .h[top|tostring] // 0
+  elif $t == "retrieve" then top = (.h[top|tostring] // 0)
   elif $t == "label"    then .
   elif $t == "call"     then .c += [.pc] | jmp($n)
   elif $t == "jmp"      then jmp($n)
