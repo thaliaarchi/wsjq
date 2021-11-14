@@ -4,13 +4,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+def color($c): "\u001b[\($c)m\(.)\u001b[0m";
+def black:   color(30); def bright_black:   color(90);
+def red:     color(31); def bright_red:     color(91);
+def green:   color(32); def bright_green:   color(92);
+def yellow:  color(33); def bright_yellow:  color(93);
+def blue:    color(34); def bright_blue:    color(94);
+def magenta: color(35); def bright_magenta: color(95);
+def cyan:    color(36); def bright_cyan:    color(96);
+def white:   color(37); def bright_white:   color(97);
+
 def inst_str:
   if .arg != null then "\(.typ) \(.arg)" else .typ end;
 def inst_asm:
   if .typ == "label" then "\(.arg):"
   else "    \(inst_str)" end;
 def inst_asm_pos($mark; $w):
-  "\(.pos)" + if $mark then "#" else "-" end +
+  if $mark then "\(.pos)#"|yellow else "\(.pos)-" end +
   if .typ == null then ""
   else
     ([$w - (.pos|tostring|length), 0] | max + 1) as $w |
@@ -37,11 +47,12 @@ def _disasm_pos(mark):
 def disasm_pos(mark):
   prog_with_eof | prog_entries | _disasm_pos(mark);
 def disasm_pos: disasm_pos(false);
-def trace($pc; $n):
+def trace($pc; $n_before; $n_after):
   prog_with_eof | prog_entries |
-  if $pc < $n then .[:$pc+$n+1]
-  else .[$pc-$n:$pc+$n+1] end |
+  if $pc < $n_before then .[:$pc+$n_after+1]
+  else .[$pc-$n_before:$pc+$n_after+1] end |
   _disasm_pos(.pc == $pc);
+def trace($pc; $n): trace($pc; $n; $n);
 def dump_state:
   def stack: .s | join(", ");
   def calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
@@ -53,7 +64,7 @@ def dump_state:
 def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
   ($inst // .prog[$pc]) as $inst |
-  "Error: \($msg)"
+  ("Error:"|bright_red) + " " + $msg
   + if $inst.pos != null then
       " at \(inst_line($inst.pos)) (offset \($inst.pos))" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
@@ -187,7 +198,7 @@ def parse:
   del(.i, .pos, .tok) |
   .labels = label_map;
 
-def interpret_step(before; format_print; read_prefix):
+def interpret_step(format_print; read_prefix):
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -217,10 +228,9 @@ def interpret_step(before; format_print; read_prefix):
     store(top; .in|tonumber) | pop | .in = "";
 
   assert(.pc < (.prog|length); "interpreter stopped") |
-  before,
   .prog[.pc] as $inst | $inst as {typ:$t, arg:$n} |
   .pc0 = .pc | .pc += 1 |
-  (if  $t == "push"     then push($n)
+  if   $t == "push"     then push($n)
   elif $t == "dup"      then push(top)
   elif $t == "copy"     then push(at($n))
   elif $t == "swap"     then .s = .s[:-2] + [top, top2]
@@ -244,25 +254,23 @@ def interpret_step(before; format_print; read_prefix):
   elif $t == "printi"   then (top | format_print), pop
   elif $t == "readc"    then read_prefix, read(readc)
   elif $t == "readi"    then read_prefix, read(readi)
-  else inst_error("malformed instruction") end);
-def interpret_step: interpret_step(empty; tostring; empty);
+  else inst_error("malformed instruction") end;
+def interpret_step: interpret_step(tostring; empty);
 
 def interpret_step_debug:
   def print_exit_status:
     if type != "object" or .pc < (.prog|length) then empty
     else
       if .prog[.pc0].typ == "end"
-      then "[program exited cleanly]\n"
-      else "[program exited implicitly]\n" end
+      then "[program exited cleanly]\n"|green
+      else "[program exited implicitly]\n"|red end
     end;
-
-  if .pc >= (.prog|length) then "[interpreter stopped]\n", .
+  if .pc >= (.prog|length) then ("[interpreter stopped]\n"|red), .
   else
+    .moved = true |
     interpret_step(
-      (.src|length|tostring|length) as $w |
-      .prog[.pc] | inst_asm_pos(false; $w) + "\n";
-      "print> \(tojson)\n";
-      "read< ") |
+      ("print>"|bright_cyan) + " \(tojson)\n";
+      "read<"|bright_cyan + " ") |
     print_exit_status, .
   end;
 
@@ -276,20 +284,20 @@ def interpret_init:
     in: "", # stdin
   };
 
-def _break:
-  type != "object" or .pc >= (.prog|length) or .breaks[.pc|tostring]?;
 def interpret_continue:
   # If parameters are recursively passed to interpret_contine, jq does
-  # not detect the tail call nor perform tail-call optimization.
-  if _break then .
+  # not detect the tail call and perform tail-call optimization.
+  if type != "object" or .pc >= (.prog|length) then .
   else interpret_step | interpret_continue end;
 def interpret_continue_debug:
-  if _break then .
+  if type != "object" or .pc >= (.prog|length) then .
+  elif .breaks[.pc|tostring] then ("[stopped at breakpoint]\n"|red), .
   else interpret_step_debug | interpret_continue_debug end;
 
 def _interpret_next($verbose; $depth):
   if $verbose then interpret_step_debug else interpret_step end |
-  if _break then .
+  if type != "object" or .pc >= (.prog|length) then .
+  elif .breaks[.pc|tostring] then ("[stopped at breakpoint]\n"|red), .
   else
     .prog[.pc0].typ as $typ |
     (if $typ == "call" then $depth+1
@@ -315,8 +323,9 @@ def debug:
     + "  q, quit        -- Quit the debugger\n"
     + "  h, help        -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
+  def print_error: ("Error:"|bright_red) + " \(.)\n";
   def run:
-    if .pc > 0 then "[interpreter restarted]\n", interpret_init
+    if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
   def breakpoint($locs):
     if $locs|length == 0 then
@@ -325,16 +334,19 @@ def debug:
       $locs[] as $l |
       if .breaks|has($l) then .breaks[$l] |= not
       elif .labels|has($l) then .breaks[.labels[$l]|tostring] = true
-      else "Label not found: \($l)\n" end
+      else "Label not found: \($l)"|print_error end
     end;
   def _debug:
-    "(wsjq) ",
+    if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
+    else empty end,
+    ("(wsjq)"|bright_black+" "),
     ((try input
       catch if . == "break" then "q" else error end) as $cmd |
     ($cmd | gsub("^\\s+|\\s+$"; "")) as $cmd |
     (if $cmd == "" then .cmd else $cmd end) as $cmd |
     ($cmd | split("\\s+"; "")) as $words |
     ($words[0] // "") as $c | $words[1:] as $args |
+    .moved = false |
     if   $c == ""               then .
     elif $c|iscmd("run")        then .cmd = "" | run
     elif $c|iscmd("continue")   then .cmd = "" | interpret_continue_debug
@@ -345,11 +357,12 @@ def debug:
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
-    else "\($cmd|tojson) is not a valid command\n", . end |
+    else ("\($cmd|tojson) is not a valid command"|print_error), . end |
     if type != "object" then .
     else _debug end);
   . + {
-    cmd: "",    # previous debug command
-    breaks: {}, # key: breakpoint pc, value: boolean status
+    cmd: "",     # previous debug command
+    breaks: {},  # key: breakpoint pc, value: boolean status
+    moved: true, # whether the last command moved pc
   } |
   interpret_init | _debug;
