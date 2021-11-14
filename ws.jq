@@ -56,7 +56,9 @@ def trace($pc; $n): trace($pc; $n; $n);
 def dump_state:
   def stack: .s | join(", ");
   def calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
-  def heap: [(.h | keys[]) as $k | "\($k):\(.h[$k])"] | join(", ");
+  def heap:
+    [(.h | keys | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
+    join(", ");
   "Stack: [\(stack)]\n" +
   "Calls: [\(calls)]\n" +
   "Heap:  {\(heap)}\n";
