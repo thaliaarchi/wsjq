@@ -9,7 +9,7 @@ include "ws";
 $src | parse |
 if   $mode == "run"    then interpret
 elif $mode == "debug"  then debug
-elif $mode == "disasm" then disasm_pos
+elif $mode == "disasm" then disasm_pc
 else "\($mode|tojson) is not a valid mode\n" | halt_error(2)
 end |
 select(type == "string")

@@ -19,11 +19,11 @@ def inst_str:
 def inst_asm:
   if .typ == "label" then "\(.arg):"
   else "    \(inst_str)" end;
-def inst_asm_pos($mark; $w):
-  if $mark then "\(.pos)#"|yellow else "\(.pos)-" end +
+def inst_asm_pc($mark; $w):
+  if $mark then "\(.pc)#"|yellow else "\(.pc)-" end +
   if .typ == null then ""
   else
-    ([$w - (.pos|tostring|length), 0] | max + 1) as $w |
+    ([$w - (.pc|tostring|length), 0] | max + 1) as $w |
     " " * $w + inst_asm
   end;
 
@@ -35,23 +35,21 @@ def inst_line($pos):
 
 def prog_with_eof:
   if .i != null and .i < (.src|length) then .
-  else .prog + [{pos:(.src|length)}] end;
-def prog_entries:
-  to_entries | map(.value * {pc:.key});
+  else .prog + [{pos:.src|length, pc:.prog|length}] end;
 
 def disasm:
   [.prog[] | inst_asm + "\n"] | join("");
-def _disasm_pos(mark):
-  (last.pos|tostring|length) as $w |
-  map(inst_asm_pos(mark; $w) + "\n") | join("");
-def disasm_pos(mark):
-  prog_with_eof | prog_entries | _disasm_pos(mark);
-def disasm_pos: disasm_pos(false);
+def _disasm_pc(mark):
+  (last.pc|tostring|length) as $w |
+  map(inst_asm_pc(mark; $w) + "\n") | join("");
+def disasm_pc(mark):
+  prog_with_eof | _disasm_pc(mark);
+def disasm_pc: disasm_pc(false);
 def trace($pc; $n_before; $n_after):
-  prog_with_eof | prog_entries |
+  prog_with_eof |
   if $pc < $n_before then .[:$pc+$n_after+1]
   else .[$pc-$n_before:$pc+$n_after+1] end |
-  _disasm_pos(.pc == $pc);
+  _disasm_pc(.pc == $pc);
 def trace($pc; $n): trace($pc; $n; $n);
 def dump_state:
   def stack: .s | join(", ");
@@ -111,13 +109,15 @@ def parse_inst:
     else $n end |
     if type == "number" then "%\(.)" else . end;
 
-  def inst($typ): .prog += [{typ:$typ, pos}];
+  def inst($typ): .prog += [{typ:$typ, pos, pc:.prog|length}];
   def inst_num($typ):
     .n = 0 | match_char(parse_num; parse_num | .n*=-1; .) |
-    .prog += [{typ:$typ, arg:.n, pos}] | del(.n);
+    .prog += [{typ:$typ, arg:.n, pos, pc:.prog|length}] |
+    del(.n);
   def inst_lbl($typ):
     .n = 0 | .l = [] | parse_lbl |
-    .prog += [{typ:$typ, arg:lbl_str, pos}] | del(.n, .l);
+    .prog += [{typ:$typ, arg:lbl_str, pos, pc:.prog|length}] |
+    del(.n, .l);
   def inst_err: inst_error("unrecognized instruction"; {typ:.tok, pos});
 
   .pos = .i | .tok = "" |
@@ -180,7 +180,7 @@ def parse_inst:
 
 def label_map:
   . as $state |
-  reduce (.prog | prog_entries[] | select(.typ == "label")) as $inst
+  reduce (.prog[] | select(.typ == "label")) as $inst
     ({}; . as $labels |($inst.arg|tostring) as $lbl |
       $state | assert($labels[$lbl] == null; "label redefined"; $inst) |
       $labels | .[$lbl] = $inst.pc);
@@ -335,15 +335,17 @@ def debug:
   def breakpoint($args):
     if $args|length > 1 then ("Too many arguments"|print_error), .
     elif $args|length == 1 then
+      def toggle: if . == null then true else not end;
       $args[0] as $l |
       if .labels|has($l) then
-        .breaks[.labels[$l]|tostring] |=
-          if . == null then true else not end
-      else ("Label not found: \($l)"|print_error), . end
+        .breaks[.labels[$l]|tostring] |= toggle
+      elif ($l|tonumber?) < (.prog|length) then
+        .breaks[$l] |= toggle
+      else ("Label or pc not found: \($l)"|print_error), . end
     else . end |
     if type == "object" then
       (.breaks | to_entries[]) as $b |
-      .prog[$b.key|tonumber] | inst_asm_pos(false; 0) |
+      .prog[$b.key|tonumber] | inst_asm_pc(false; 0) |
       if $b.value then green else red end + "\n"
     else empty end, .;
   def _debug:
@@ -362,7 +364,7 @@ def debug:
     elif $c|iscmd("continue")   then .cmd = "" | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
-    elif $c|iscmd("disasm")     then .pc as $pc | disasm_pos(.pc == $pc), .
+    elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
     elif $c|iscmd("breakpoint") then breakpoint($args)
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("quit")       then ""
