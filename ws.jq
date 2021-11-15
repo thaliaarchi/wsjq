@@ -219,7 +219,8 @@ def interpret_step(format_print; read_prefix):
       try (.in = input + "\n" | process)
       catch
         if . != "break" then error
-        elif .on_eof|type == "number" then store(top; .on_eof) | pop
+        elif $state|.on_eof|type == "number" then
+          $state|store(top; .on_eof) | pop
         else $state|inst_error("EOF") end
     end;
   def readc:
@@ -293,13 +294,15 @@ def interpret_continue:
   else interpret_step | interpret_continue end;
 def interpret_continue_debug:
   if type != "object" or .pc >= (.prog|length) then .
-  elif .breaks[.pc|tostring] then ("[stopped at breakpoint]\n"|red), .
+  elif .moved and .breaks[.pc|tostring] then
+    ("[stopped at breakpoint]\n"|red), .
   else interpret_step_debug | interpret_continue_debug end;
 
 def _interpret_next($verbose; $depth):
   if $verbose then interpret_step_debug else interpret_step end |
   if type != "object" or .pc >= (.prog|length) then .
-  elif .breaks[.pc|tostring] then ("[stopped at breakpoint]\n"|red), .
+  elif .moved and .breaks[.pc|tostring] then
+    ("[stopped at breakpoint]\n"|red), .
   else
     .prog[.pc0].typ as $typ |
     (if $typ == "call" then $depth+1
@@ -329,15 +332,20 @@ def debug:
   def run:
     if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
-  def breakpoint($locs):
-    if $locs|length == 0 then
-      .prog[.breaks | keys[] | tonumber] | inst_asm_pos(false; 0) + "\n"
-    else
-      $locs[] as $l |
-      if .breaks|has($l) then .breaks[$l] |= not
-      elif .labels|has($l) then .breaks[.labels[$l]|tostring] = true
-      else "Label not found: \($l)"|print_error end
-    end;
+  def breakpoint($args):
+    if $args|length > 1 then ("Too many arguments"|print_error), .
+    elif $args|length == 1 then
+      $args[0] as $l |
+      if .labels|has($l) then
+        .breaks[.labels[$l]|tostring] |=
+          if . == null then true else not end
+      else ("Label not found: \($l)"|print_error), . end
+    else . end |
+    if type == "object" then
+      (.breaks | to_entries[]) as $b |
+      .prog[$b.key|tonumber] | inst_asm_pos(false; 0) |
+      if $b.value then green else red end + "\n"
+    else empty end, .;
   def _debug:
     if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
     else empty end,
@@ -355,7 +363,7 @@ def debug:
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pos(.pc == $pc), .
-    elif $c|iscmd("breakpoint") then breakpoint($args), .
+    elif $c|iscmd("breakpoint") then breakpoint($args)
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
