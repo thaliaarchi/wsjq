@@ -7,29 +7,53 @@
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
-USAGE="usage: $0 [<mode>] <file>
+USAGE="usage: $0 [-h|--help] [-e|--on-eof <eof>] [<mode>] <file>
 
+Modes:
   run    -- Run the program (default)
   debug  -- Run the program in the debugger
-  disasm -- Disassemble the program
-  help   -- Show usage
-"
+  disasm -- Disassemble the program"
 
-if [ "$1" = help ] || [ "$1" = -h ] || [ "$1" = "--help" ]; then
-  echo -n "$USAGE" && exit
-fi
-if [ $# -eq 1 ]; then
-  mode="run"
-  file="$1"
-elif [ $# -eq 2 ]; then
+usage() {
+  echo "$USAGE" 2>&2
+  exit 2
+}
+
+mode=run
+if [ "$1" = run ] || [ "$1" = debug ] || [ "$1" = disasm ]; then
   mode="$1"
-  file="$2"
-else
-  echo -n "$USAGE" && exit 2
+  shift
+fi
+on_eof=error
+
+while getopts ':he:-:' optchar; do
+  case "$optchar" in
+    -)
+      case "$OPTARG" in
+        help)     usage ;;
+        on-eof)   on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        on-eof=*) on_eof="${OPTARG#*=}" ;;
+        *)        echo "Invalid option --$OPTARG" >&2; exit 2 ;;
+      esac;;
+    e) on_eof="$OPTARG" ;;
+    h) usage ;;
+    *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
+  esac
+done
+shift $((OPTIND-1))
+
+if [ $# -ne 1 ]; then
+  usage
+fi
+
+file="$1"
+if [ ! -f "$file" ]; then
+  echo "$0: No such file or directory" >&2; exit 1
 fi
 
 jq -njMR \
   --arg mode "$mode" \
+  --arg on_eof "$on_eof" \
   --rawfile src "$file" \
   -L "$SCRIPT_DIR" \
   -f "$SCRIPT_DIR/main.jq"

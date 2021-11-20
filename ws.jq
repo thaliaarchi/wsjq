@@ -34,7 +34,7 @@ def inst_line($pos):
   "\($i+1):\($pos-.[$i]+1)";
 
 def prog_with_eof:
-  if .i != null and .i < (.src|length) then .
+  if .i != null and .i < (.src|length) then .prog
   else .prog + [{pos:.src|length, pc:.prog|length}] end;
 
 def disasm:
@@ -61,15 +61,16 @@ def dump_state:
   "Calls: [\(calls)]\n" +
   "Heap:  {\(heap)}\n";
 
+def prefix_error: ("Error:"|bright_red) + " " + .;
 def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
   ($inst // .prog[$pc]) as $inst |
-  ("Error:"|bright_red) + " " + $msg
+  ($msg|prefix_error)
   + if $inst.pos != null then
       " at \(inst_line($inst.pos)) (offset \($inst.pos))" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
   + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end
-  + if .pc!=null then "\n" + dump_state else "" end |
+  + if .pc != null then "\n" + dump_state else "" end |
   halt_error(1);
 def inst_error($msg; $inst): inst_error($msg; $inst; $inst.pc);
 def inst_error($msg): inst_error($msg; null);
@@ -329,12 +330,11 @@ def debug:
     "  q, quit       -- Quit the debugger\n" +
     "  h, help       -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
-  def print_error: ("Error:"|bright_red) + " \(.)\n";
   def run:
     if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
   def breakpoint($args):
-    if $args|length > 1 then ("Too many arguments"|print_error), .
+    if $args|length > 1 then ("Too many arguments\n"|prefix_error), .
     elif $args|length == 1 then
       def toggle: if . == null then true else not end;
       $args[0] as $v |
@@ -344,7 +344,7 @@ def debug:
         (try ($v|tonumber) catch -1) as $n |
         if 0 <= $n and $n < (.prog|length) then
           .breaks[$v] |= toggle
-        else ("Label or pc not found: \($v)"|print_error), . end
+        else ("Label or pc not found: \($v)\n"|prefix_error), . end
       end
     else . end |
     if type == "object" then
@@ -377,7 +377,7 @@ def debug:
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
-    else ("\($cmd|tojson) is not a valid command"|print_error), . end |
+    else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
     if type != "object" then .
     else _debug end);
   . + {
