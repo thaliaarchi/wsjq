@@ -5,12 +5,20 @@ language, written in jq.
 
 ## Usage
 
-    wsjq [<mode>] <file>
+    usage: wsjq [<mode>] [-h|--help] [-e|--on-eof=<behavior>] <file>
 
+    Modes:
       run    -- Run the program (default)
       debug  -- Run the program in the debugger
       disasm -- Disassemble the program
-      help   -- Show usage
+
+    Options:
+      -e, --on-eof=<behavior>
+          Set EOF-handling behavior, which can be "error" (like wspace) or
+          an integer (e.g. 0 or -1).
+
+      -h, --help
+          Show usage.
 
 wsjq has been tested with jq version 1.6.
 

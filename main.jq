@@ -8,7 +8,7 @@ include "ws";
 
 (if $on_eof == "error" or $on_eof == null then "error"
   else
-    try ($on_eof|tonumber)
+    try ($on_eof | tonumber | if . != trunc then error else . end)
     catch ("Invalid value for --on-eof: \"\($on_eof)\"\n" |
       prefix_error | halt_error(2))
   end) as $on_eof |

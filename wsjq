@@ -7,15 +7,24 @@
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
-USAGE="usage: $0 [-h|--help] [-e|--on-eof <eof>] [<mode>] <file>
+USAGE="usage: ${0##*/} [<mode>] [-h|--help] [-e|--on-eof=<behavior>] <file>
 
 Modes:
   run    -- Run the program (default)
   debug  -- Run the program in the debugger
-  disasm -- Disassemble the program"
+  disasm -- Disassemble the program
+
+Options:
+  -e, --on-eof=<behavior>
+      Set EOF-handling behavior, which can be \"error\" (like wspace) or
+      an integer (e.g. 0 or -1).
+
+  -h, --help
+      Show usage.
+"
 
 usage() {
-  echo "$USAGE" 2>&2
+  echo -n "$USAGE" 2>&2
   exit 2
 }
 
