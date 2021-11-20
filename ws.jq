@@ -39,17 +39,17 @@ def prog_with_eof:
 
 def disasm:
   [.prog[] | inst_asm + "\n"] | join("");
-def _disasm_pc(mark):
+def disasm_pc_insts(mark):
   (last.pc|tostring|length) as $w |
   map(inst_asm_pc(mark; $w) + "\n") | join("");
 def disasm_pc(mark):
-  prog_with_eof | _disasm_pc(mark);
+  prog_with_eof | disasm_pc_insts(mark);
 def disasm_pc: disasm_pc(false);
 def trace($pc; $n_before; $n_after):
   prog_with_eof |
   if $pc < $n_before then .[:$pc+$n_after+1]
   else .[$pc-$n_before:$pc+$n_after+1] end |
-  _disasm_pc(.pc == $pc);
+  disasm_pc_insts(.pc == $pc);
 def trace($pc; $n): trace($pc; $n; $n);
 def dump_state:
   def stack: .s | join(", ");
@@ -317,16 +317,17 @@ def interpret: interpret_init | interpret_continue;
 
 def debug:
   def help:
-    "Debugger commands:\n"
-    + "  r, run         -- Run or restart the program from the start\n"
-    + "  c, continue    -- Continue from the current instruction\n"
-    + "  s, step        -- Execute next instruction, stepping into calls\n"
-    + "  n, next        -- Execute next instruction, stepping over calls\n"
-    + "  b, breakpoint  -- Set or clear a breakpoint\n"
-    + "  d, disasm      -- Disassemble program\n"
-    + "  p, print       -- Dump the data stack, call stack, and heap\n"
-    + "  q, quit        -- Quit the debugger\n"
-    + "  h, help        -- Show a list of all debugger commands\n";
+    "Debugger commands:\n" +
+    "  r, run        -- Run or restart the program from the start\n" +
+    "  c, continue   -- Continue from the current instruction\n" +
+    "  s, step       -- Execute next instruction, stepping into calls\n" +
+    "  n, next       -- Execute next instruction, stepping over calls\n" +
+    "  b, breakpoint -- Set or clear a breakpoint\n" +
+    "  d, disasm     -- Disassemble program\n" +
+    "  l, labels     -- List labels in program\n" +
+    "  p, print      -- Dump the data stack, call stack, and heap\n" +
+    "  q, quit       -- Quit the debugger\n" +
+    "  h, help       -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def print_error: ("Error:"|bright_red) + " \(.)\n";
   def run:
@@ -336,18 +337,24 @@ def debug:
     if $args|length > 1 then ("Too many arguments"|print_error), .
     elif $args|length == 1 then
       def toggle: if . == null then true else not end;
-      $args[0] as $l |
-      if .labels|has($l) then
-        .breaks[.labels[$l]|tostring] |= toggle
-      elif ($l|tonumber?) < (.prog|length) then
-        .breaks[$l] |= toggle
-      else ("Label or pc not found: \($l)"|print_error), . end
+      $args[0] as $v |
+      if .labels|has($v) then
+        .breaks[.labels[$v]|tostring] |= toggle
+      else
+        (try ($v|tonumber) catch -1) as $n |
+        if 0 <= $n and $n < (.prog|length) then
+          .breaks[$v] |= toggle
+        else ("Label or pc not found: \($v)"|print_error), . end
+      end
     else . end |
     if type == "object" then
       (.breaks | to_entries[]) as $b |
       .prog[$b.key|tonumber] | inst_asm_pc(false; 0) |
       if $b.value then green else red end + "\n"
     else empty end, .;
+  def list_labels:
+    [.prog[.labels | to_entries | sort_by(.value)[].value]] |
+    disasm_pc_insts(false);
   def _debug:
     if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
     else empty end,
@@ -364,8 +371,9 @@ def debug:
     elif $c|iscmd("continue")   then .cmd = "" | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
-    elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
     elif $c|iscmd("breakpoint") then breakpoint($args)
+    elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
+    elif $c|iscmd("labels")     then list_labels, .
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
