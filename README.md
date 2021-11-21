@@ -20,6 +20,10 @@ language, written in jq.
           Set EOF-handling behavior, which can be "error" (like wspace) or
           an integer (e.g. 0 or -1).
 
+      -n, --no-prompt
+          Do not prompt for input. If --in-file is specified, then no input
+          will be prompted after the file has been read.
+
       -c, --check-clean
           Assert that the stack is empty and that the program explicitly at
           the end of execution.

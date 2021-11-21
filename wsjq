@@ -22,6 +22,10 @@ Options:
       Set EOF-handling behavior, which can be \"error\" (like wspace) or
       an integer (e.g. 0 or -1).
 
+  -n, --no-prompt
+      Do not prompt for input. If --in-file is specified, then no input
+      will be prompted after the file has been read.
+
   -c, --check-clean
       Assert that the stack is empty and that the program explicitly at
       the end of execution.
@@ -42,9 +46,10 @@ if [ "$1" = run ] || [ "$1" = debug ] || [ "$1" = disasm ]; then
 fi
 in_file=/dev/null
 on_eof=error
+no_prompt=false
 check_clean=false
 
-while getopts ':hi:e:c-:' optchar; do
+while getopts ':hi:e:cn-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
@@ -53,12 +58,14 @@ while getopts ':hi:e:c-:' optchar; do
         in-file=*)   in_file="${OPTARG#*=}" ;;
         on-eof)      on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
         on-eof=*)    on_eof="${OPTARG#*=}" ;;
+        no-prompt)   no_prompt=true ;;
         check-clean) check_clean=true ;;
         *)           echo "Invalid option --$OPTARG" >&2; exit 2 ;;
       esac;;
     h) usage ;;
     i) in_file="$OPTARG" ;;
     e) on_eof="$OPTARG" ;;
+    n) no_prompt=true ;;
     c) check_clean=true ;;
     *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
   esac
@@ -80,6 +87,7 @@ fi
 jq -njMR \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
+  --arg no_prompt "$no_prompt" \
   --arg check_clean "$check_clean" \
   --rawfile src "$file" \
   --rawfile in "$in_file" \

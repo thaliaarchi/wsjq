@@ -214,15 +214,15 @@ def interpret_step(format_print; read_prefix):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
   def read(process):
     assert_len(1) |
+    def handle_eof:
+      if .on_eof|type == "number" then store(top; .on_eof) | pop
+      else inst_error("EOF") end;
     if .in != "" then process
+    elif .no_prompt then handle_eof
     else
       . as $state |
       try (.in = input + "\n" | process)
-      catch
-        if . != "break" then error
-        elif $state|.on_eof|type == "number" then
-          $state|store(top; .on_eof) | pop
-        else $state|inst_error("EOF") end
+      catch if . == "break" then $state|handle_eof else error end
     end;
   def readc:
     store(top; (.in|explode)[0]) | pop | .in |= .[1:];
