@@ -14,6 +14,7 @@ include "ws";
   end) as $on_eof |
 $src | parse |
 .on_eof = $on_eof |
+.check_clean = $check_clean == "true" |
 if   $mode == "run"    then interpret
 elif $mode == "debug"  then debug
 elif $mode == "disasm" then disasm_pc

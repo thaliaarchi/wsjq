@@ -7,7 +7,7 @@
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
-USAGE="usage: ${0##*/} [<mode>] [-h|--help] [-e|--on-eof=<behavior>] <file>
+USAGE="usage: ${0##*/} [<mode>] [-h|--help] [-e|--on-eof=<behavior>] [-c|--check-clean] <file>
 
 Modes:
   run    -- Run the program (default)
@@ -18,6 +18,10 @@ Options:
   -e, --on-eof=<behavior>
       Set EOF-handling behavior, which can be \"error\" (like wspace) or
       an integer (e.g. 0 or -1).
+
+  -c, --check-clean
+      Assert that the stack is empty and that the program explicitly at
+      the end of execution.
 
   -h, --help
       Show usage.
@@ -34,18 +38,21 @@ if [ "$1" = run ] || [ "$1" = debug ] || [ "$1" = disasm ]; then
   shift
 fi
 on_eof=error
+check_clean=false
 
-while getopts ':he:-:' optchar; do
+while getopts ':he:c-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
-        help)     usage ;;
-        on-eof)   on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
-        on-eof=*) on_eof="${OPTARG#*=}" ;;
-        *)        echo "Invalid option --$OPTARG" >&2; exit 2 ;;
+        help)        usage ;;
+        on-eof)      on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        on-eof=*)    on_eof="${OPTARG#*=}" ;;
+        check-clean) check_clean=true ;;
+        *)           echo "Invalid option --$OPTARG" >&2; exit 2 ;;
       esac;;
-    e) on_eof="$OPTARG" ;;
     h) usage ;;
+    e) on_eof="$OPTARG" ;;
+    c) check_clean=true ;;
     *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
   esac
 done
@@ -63,6 +70,7 @@ fi
 jq -njMR \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
+  --arg check_clean "$check_clean" \
   --rawfile src "$file" \
   -L "$SCRIPT_DIR" \
   -f "$SCRIPT_DIR/main.jq"

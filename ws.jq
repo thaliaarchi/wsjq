@@ -314,7 +314,17 @@ def _interpret_next($verbose; $depth):
 def interpret_next: _interpret_next(false; 0);
 def interpret_next_debug: _interpret_next(true; 0);
 
-def interpret: interpret_init | interpret_continue;
+def check_clean_exit:
+  if type == "object" and .check_clean then
+    if .prog[.pc0].typ != "end" and (.s|length != 0) then
+      inst_error("Exited implicitly with non-empty stack")
+    elif .prog[.pc0].typ != "end" then
+      inst_error("Exited implicitly")
+    elif .s|length != 0 then
+      inst_error("Exited with non-empty stack")
+    else . end
+  else . end;
+def interpret: interpret_init | interpret_continue | check_clean_exit;
 
 def debug:
   def help:

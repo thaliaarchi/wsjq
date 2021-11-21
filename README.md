@@ -5,7 +5,7 @@ language, written in jq.
 
 ## Usage
 
-    usage: wsjq [<mode>] [-h|--help] [-e|--on-eof=<behavior>] <file>
+    usage: wsjq [<mode>] [-h|--help] [-e|--on-eof=<behavior>] [-c|--check-clean] <file>
 
     Modes:
       run    -- Run the program (default)
@@ -16,6 +16,10 @@ language, written in jq.
       -e, --on-eof=<behavior>
           Set EOF-handling behavior, which can be "error" (like wspace) or
           an integer (e.g. 0 or -1).
+
+      -c, --check-clean
+          Assert that the stack is empty and that the program explicitly at
+          the end of execution.
 
       -h, --help
           Show usage.
