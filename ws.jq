@@ -227,9 +227,11 @@ def interpret_step(format_print; read_prefix):
   def readc:
     store(top; (.in|explode)[0]) | pop | .in |= .[1:];
   def readi:
-    assert(.in | test("^\\s*[+-]?\\d+\\s*$");
-      "invalid integer " + (.in | rtrimstr("\n") | tojson)) |
-    store(top; .in|tonumber) | pop | .in = "";
+    (.in|index("\n")) as $i | .in[:$i] as $line | .in |= .[$i+1:] |
+    (try ($line|tonumber) catch .5) as $n |
+    assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
+      "invalid integer " + ($line | tojson)) |
+    store(top; $n) | pop;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
   .prog[.pc] as $inst | $inst as {typ:$t, arg:$n} |
@@ -280,12 +282,12 @@ def interpret_step_debug:
 
 def interpret_init:
   . + {
-    pc: 0,  # program counter
-    pc0: 0, # previous program counter
-    s: [],  # data stack
-    c: [],  # call stack
-    h: {},  # heap
-    in: "", # stdin
+    pc: 0,        # program counter
+    pc0: 0,       # previous program counter
+    s: [],        # data stack
+    c: [],        # call stack
+    h: {},        # heap
+    in: ($in//"") # stdin
   };
 
 def interpret_continue:
@@ -317,11 +319,11 @@ def interpret_next_debug: _interpret_next(true; 0);
 def check_clean_exit:
   if type == "object" and .check_clean then
     if .prog[.pc0].typ != "end" and (.s|length != 0) then
-      inst_error("Exited implicitly with non-empty stack")
+      inst_error("exited implicitly with non-empty stack")
     elif .prog[.pc0].typ != "end" then
-      inst_error("Exited implicitly")
+      inst_error("exited implicitly")
     elif .s|length != 0 then
-      inst_error("Exited with non-empty stack")
+      inst_error("exited with non-empty stack")
     else . end
   else . end;
 def interpret: interpret_init | interpret_continue | check_clean_exit;
@@ -344,7 +346,7 @@ def debug:
     if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
   def breakpoint($args):
-    if $args|length > 1 then ("Too many arguments\n"|prefix_error), .
+    if $args|length > 1 then ("too many arguments\n"|prefix_error), .
     elif $args|length == 1 then
       def toggle: if . == null then true else not end;
       $args[0] as $v |
@@ -352,9 +354,9 @@ def debug:
         .breaks[.labels[$v]|tostring] |= toggle
       else
         (try ($v|tonumber) catch -1) as $n |
-        if 0 <= $n and $n < (.prog|length) then
+        if 0 <= $n and $n < (.prog|length) and ($n|. == trunc) then
           .breaks[$v] |= toggle
-        else ("Label or pc not found: \($v)\n"|prefix_error), . end
+        else ("label or pc not found: \($v)\n"|prefix_error), . end
       end
     else . end |
     if type == "object" then

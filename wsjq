@@ -15,6 +15,9 @@ Modes:
   disasm -- Disassemble the program
 
 Options:
+  -i, --in-file=<in_file>
+      Read from <in_file> for the initial input, then from stdin.
+
   -e, --on-eof=<behavior>
       Set EOF-handling behavior, which can be \"error\" (like wspace) or
       an integer (e.g. 0 or -1).
@@ -37,20 +40,24 @@ if [ "$1" = run ] || [ "$1" = debug ] || [ "$1" = disasm ]; then
   mode="$1"
   shift
 fi
+in_file=/dev/null
 on_eof=error
 check_clean=false
 
-while getopts ':he:c-:' optchar; do
+while getopts ':hi:e:c-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
         help)        usage ;;
+        in-file)     in_file="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        in-file=*)   in_file="${OPTARG#*=}" ;;
         on-eof)      on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
         on-eof=*)    on_eof="${OPTARG#*=}" ;;
         check-clean) check_clean=true ;;
         *)           echo "Invalid option --$OPTARG" >&2; exit 2 ;;
       esac;;
     h) usage ;;
+    i) in_file="$OPTARG" ;;
     e) on_eof="$OPTARG" ;;
     c) check_clean=true ;;
     *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
@@ -64,7 +71,10 @@ fi
 
 file="$1"
 if [ ! -f "$file" ]; then
-  echo "$0: No such file or directory" >&2; exit 1
+  echo "${0##*/}: No such file or directory: $file" >&2; exit 1
+fi
+if [ ! -f "$in_file" ] && [ "$in_file" != /dev/null ]; then
+  echo "${0##*/}: No such file or directory: $in_file" >&2; exit 1
 fi
 
 jq -njMR \
@@ -72,5 +82,6 @@ jq -njMR \
   --arg on_eof "$on_eof" \
   --arg check_clean "$check_clean" \
   --rawfile src "$file" \
+  --rawfile in "$in_file" \
   -L "$SCRIPT_DIR" \
   -f "$SCRIPT_DIR/main.jq"

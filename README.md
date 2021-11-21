@@ -13,6 +13,9 @@ language, written in jq.
       disasm -- Disassemble the program
 
     Options:
+      -i, --in-file=<in_file>
+          Read from <in_file> for the initial input, then from stdin.
+
       -e, --on-eof=<behavior>
           Set EOF-handling behavior, which can be "error" (like wspace) or
           an integer (e.g. 0 or -1).
