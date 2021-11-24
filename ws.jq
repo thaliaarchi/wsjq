@@ -215,7 +215,8 @@ def interpret_step(format_print; read_prefix):
   def read(process):
     assert_len(1) |
     def handle_eof:
-      if .on_eof|type == "number" then store(top; .on_eof) | pop
+      if .on_eof|type == "number" then
+        store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
       else inst_error("EOF") end;
     if .in != "" then process
     elif .no_prompt then handle_eof
@@ -225,9 +226,11 @@ def interpret_step(format_print; read_prefix):
       catch if . == "break" then $state|handle_eof else error end
     end;
   def readc:
-    store(top; (.in|explode)[0]) | pop | .in |= .[1:];
+    store(top; (.in|explode)[0]) | pop |
+    .in_consumed += .in[:1] | .in |= .[1:];
   def readi:
-    (.in|index("\n")) as $i | .in[:$i] as $line | .in |= .[$i+1:] |
+    (.in|index("\n")) as $i | .in[:$i] as $line |
+    .in_consumed += .in[:$i+1] | .in |= .[$i+1:] |
     (try ($line|tonumber) catch .5) as $n |
     assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
       "invalid integer " + ($line | tojson)) |
@@ -282,12 +285,13 @@ def interpret_step_debug:
 
 def interpret_init:
   . + {
-    pc: 0,        # program counter
-    pc0: 0,       # previous program counter
-    s: [],        # data stack
-    c: [],        # call stack
-    h: {},        # heap
-    in: ($in//"") # stdin
+    pc: 0,           # program counter
+    pc0: 0,          # previous program counter
+    s: [],           # data stack
+    c: [],           # call stack
+    h: {},           # heap
+    in: ($in//""),   # stdin
+    in_consumed: "", # input consumed from stdin
   };
 
 def interpret_continue:
@@ -339,6 +343,7 @@ def debug:
     "  d, disasm     -- Disassemble program\n" +
     "  l, labels     -- List labels in program\n" +
     "  p, print      -- Dump the data stack, call stack, and heap\n" +
+    "  i, input      -- Dump the input consumed from stdin so far\n" +
     "  q, quit       -- Quit the debugger\n" +
     "  h, help       -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
@@ -387,6 +392,7 @@ def debug:
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
     elif $c|iscmd("labels")     then list_labels, .
     elif $c|iscmd("print")      then dump_state, .
+    elif $c|iscmd("input")      then .in_consumed, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
     else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
