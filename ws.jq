@@ -209,6 +209,7 @@ def interpret_step(format_print; read_prefix):
   def at($n): assert_len($n+1) | .s[-$n-1];
   def top: at(0);
   def top2: at(1);
+  def assert_div: assert(top != 0; "zero divisor");
   def store($addr; $val): .h[$addr|tostring] = $val;
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
@@ -248,8 +249,8 @@ def interpret_step(format_print; read_prefix):
   elif $t == "add"      then top2 += top | pop
   elif $t == "sub"      then top2 -= top | pop
   elif $t == "mul"      then top2 *= top | pop
-  elif $t == "div"      then top2 = (top2 / top | trunc) | pop
-  elif $t == "mod"      then top2 %= top | pop
+  elif $t == "div"      then assert_div | top2 = (top2 / top | trunc) | pop
+  elif $t == "mod"      then assert_div | top2 %= top | pop
   elif $t == "store"    then store(top2; top) | pop | pop
   elif $t == "retrieve" then top = (.h[top|tostring] // 0)
   elif $t == "label"    then .
