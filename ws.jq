@@ -213,29 +213,33 @@ def interpret_step(format_print; read_prefix):
   def store($addr; $val): .h[$addr|tostring] = $val;
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
-  def read(process):
+
+  def read:
     assert_len(1) |
-    def handle_eof:
-      if .on_eof|type == "number" then
-        store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
-      else inst_error("EOF") end;
-    if .in != "" then process
-    elif .no_prompt then handle_eof
+    if .in != "" or .eof then .
     else
       . as $state |
-      try (.in = input + "\n" | process)
-      catch if . == "break" then $state|handle_eof else error end
+      try (.in = input + "\n")
+      catch if . == "break" then $state.eof = true else error end
     end;
+  def handle_eof:
+    if .on_eof|type == "number" then
+      store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
+    else inst_error("EOF") end;
   def readc:
-    store(top; (.in|explode)[0]) | pop |
-    .in_consumed += .in[:1] | .in |= .[1:];
+    read | if .in == "" then handle_eof else
+      store(top; (.in|explode)[0]) | pop |
+      .in_consumed += .in[:1] | .in |= .[1:]
+    end;
   def readi:
-    (.in|index("\n")) as $i | .in[:$i] as $line |
-    .in_consumed += .in[:$i+1] | .in |= .[$i+1:] |
-    (try ($line|tonumber) catch .5) as $n |
-    assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
-      "invalid integer " + ($line | tojson)) |
-    store(top; $n) | pop;
+    read | if .in == "" then handle_eof else
+      (.in|index("\n")) as $i | .in[:$i] as $line |
+      .in_consumed += .in[:$i+1] | .in |= .[$i+1:] |
+      (try ($line|tonumber) catch .5) as $n |
+      assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
+        "invalid integer " + ($line | tojson)) |
+      store(top; $n) | pop
+    end;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
   .prog[.pc] as $inst | $inst as {typ:$t, arg:$n} |
@@ -262,8 +266,8 @@ def interpret_step(format_print; read_prefix):
   elif $t == "end"      then .pc = (.prog|length)
   elif $t == "printc"   then ([top] | implode | format_print), pop
   elif $t == "printi"   then (top | format_print), pop
-  elif $t == "readc"    then read_prefix, read(readc)
-  elif $t == "readi"    then read_prefix, read(readi)
+  elif $t == "readc"    then read_prefix, readc
+  elif $t == "readi"    then read_prefix, readi
   else inst_error("malformed instruction") end;
 def interpret_step: interpret_step(tostring; empty);
 

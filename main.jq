@@ -14,7 +14,7 @@ include "ws";
   end) as $on_eof |
 $src | parse |
 .on_eof = $on_eof |
-.no_prompt = $no_prompt == "true" |
+.eof = $no_prompt == "true" |
 .check_clean = $check_clean == "true" |
 if   $mode == "run"    then interpret
 elif $mode == "debug"  then debug
