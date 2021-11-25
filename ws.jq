@@ -370,7 +370,7 @@ def debug:
       end
     else . end |
     if type == "object" then
-      (.breaks | to_entries[]) as $b |
+      (.breaks | to_entries | sort_by(.key|tonumber)[]) as $b |
       .prog[$b.key|tonumber] | inst_asm_pc(false; 0) |
       if $b.value then green else red end + "\n"
     else empty end, .;
