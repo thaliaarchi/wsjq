@@ -210,7 +210,13 @@ def interpret_step(format_print; read_prefix):
   def top: at(0);
   def top2: at(1);
   def assert_div: assert(top != 0; "zero divisor");
-  def store($addr; $val): .h[$addr|tostring] = $val;
+  def store($addr; $val):
+    .max_addr = ([.max_addr, $addr] | max) |
+    .h[$addr|tostring] = $val;
+  def retrieve($addr):
+    assert((.check_retrieve|not) or $addr <= .max_addr;
+      "retrieve above maximum stored address") |
+    .h[$addr|tostring] // 0;
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
 
@@ -256,7 +262,7 @@ def interpret_step(format_print; read_prefix):
   elif $t == "div"      then assert_div | top2 = (top2 / top | trunc) | pop
   elif $t == "mod"      then assert_div | top2 %= top | pop
   elif $t == "store"    then store(top2; top) | pop | pop
-  elif $t == "retrieve" then top = (.h[top|tostring] // 0)
+  elif $t == "retrieve" then top = retrieve(top)
   elif $t == "label"    then .
   elif $t == "call"     then .c += [.pc] | jmp($n)
   elif $t == "jmp"      then jmp($n)
@@ -297,6 +303,7 @@ def interpret_init:
     h: {},           # heap
     in: ($in//""),   # stdin
     in_consumed: "", # input consumed from stdin
+    max_addr: -1,    # maximum stored address
   };
 
 def interpret_continue:

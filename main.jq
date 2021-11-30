@@ -16,6 +16,7 @@ $src | parse |
 .on_eof = $on_eof |
 .eof = $no_prompt == "true" |
 .check_clean = $check_clean == "true" |
+.check_retrieve = $check_retrieve == "true" |
 if   $mode == "run"    then interpret
 elif $mode == "debug"  then debug
 elif $mode == "disasm" then disasm_pc

@@ -30,6 +30,10 @@ Options:
       Assert that the stack is empty and that the program explicitly at
       the end of execution.
 
+  -r, --check-retrieve
+      Assert that retrieved addresses are not above previously-stored
+      addresses.
+
   -h, --help
       Show usage.
 "
@@ -48,25 +52,28 @@ in_file=/dev/null
 on_eof=error
 no_prompt=false
 check_clean=false
+check_retrieve=false
 
-while getopts ':hi:e:cn-:' optchar; do
+while getopts ':hi:e:crn-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
-        help)        usage ;;
-        in-file)     in_file="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
-        in-file=*)   in_file="${OPTARG#*=}" ;;
-        on-eof)      on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
-        on-eof=*)    on_eof="${OPTARG#*=}" ;;
-        no-prompt)   no_prompt=true ;;
-        check-clean) check_clean=true ;;
-        *)           echo "Invalid option --$OPTARG" >&2; exit 2 ;;
+        help)           usage ;;
+        in-file)        in_file="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        in-file=*)      in_file="${OPTARG#*=}" ;;
+        on-eof)         on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        on-eof=*)       on_eof="${OPTARG#*=}" ;;
+        no-prompt)      no_prompt=true ;;
+        check-clean)    check_clean=true ;;
+        check-retrieve) check_retrieve=true ;;
+        *)              echo "Invalid option --$OPTARG" >&2; exit 2 ;;
       esac;;
     h) usage ;;
     i) in_file="$OPTARG" ;;
     e) on_eof="$OPTARG" ;;
     n) no_prompt=true ;;
     c) check_clean=true ;;
+    r) check_retrieve=true ;;
     *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
   esac
 done
@@ -89,6 +96,7 @@ jq -njMR \
   --arg on_eof "$on_eof" \
   --arg no_prompt "$no_prompt" \
   --arg check_clean "$check_clean" \
+  --arg check_retrieve "$check_retrieve" \
   --rawfile src "$file" \
   --rawfile in "$in_file" \
   -L "$SCRIPT_DIR" \

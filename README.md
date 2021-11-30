@@ -28,6 +28,10 @@ language, written in jq.
           Assert that the stack is empty and that the program explicitly at
           the end of execution.
 
+      -r, --check-retrieve
+          Assert that retrieved addresses are not above previously-stored
+          addresses.
+
       -h, --help
           Show usage.
 
