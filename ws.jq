@@ -101,14 +101,17 @@ def parse_inst:
     match_char(digit(0); digit(1); .);
   def lbl_str:
     .n as $n | .l |
-    if length%8 == 0 and length > 0 then
+    if length == 0 then "%b" # empty binary string
+    elif length%8 == 0 then
       [range(0;length;8) as $i |
         reduce .[$i:$i+8][] as $d (0; .*2 + $d)] |
       # Label is visible ASCII and doesn't start with %
       if all(33 <= . and . <= 126) and .[0] != 37
-      then implode else $n end
-    else $n end |
-    if type == "number" then "%\(.)" else . end;
+      then implode else . end
+    else . end |
+    if type != "array" then .
+    elif length > 1 and .[0] == 0 then "%b\(join(""))"
+    else "%\($n)" end;
 
   def inst($typ): .prog += [{typ:$typ, pos, pc:.prog|length}];
   def inst_num($typ):
