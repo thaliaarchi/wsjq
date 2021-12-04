@@ -387,6 +387,9 @@ def debug:
   def list_labels:
     [.prog[.labels | to_entries | sort_by(.value)[].value]] |
     disasm_pc_insts(false);
+  def print_input:
+    .in_consumed |
+    if .[-1:] != "\n" then . + ("⏎\n"|bright_black) else . end;
   def _debug:
     if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
     else empty end,
@@ -407,7 +410,7 @@ def debug:
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
     elif $c|iscmd("labels")     then list_labels, .
     elif $c|iscmd("print")      then dump_state, .
-    elif $c|iscmd("input")      then .in_consumed, .
+    elif $c|iscmd("input")      then print_input, .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
     else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
