@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2021 Andrew Archibald
+# Copyright (c) 2021-2022 Andrew Archibald
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -7,7 +7,7 @@
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
-USAGE="usage: ${0##*/} [<mode>] [-h|--help] [-e|--on-eof=<behavior>] [-c|--check-clean] <file>
+USAGE="usage: ${0##*/} [<mode>] [<options>] <file>
 
 Modes:
   run    -- Run the program (default)
@@ -19,20 +19,19 @@ Options:
       Read from <in_file> for the initial input, then from stdin.
 
   -e, --on-eof=<behavior>
-      Set EOF-handling behavior, which can be \"error\" (like wspace) or
-      an integer (e.g. 0 or -1).
+      Set EOF-handling behavior, which can be \"error\" (default; like wspace)
+      or an integer (e.g., 0 or -1).
 
   -n, --no-prompt
-      Do not prompt for input. If --in-file is specified, then no input
+      Do not prompt for input. If --in-file is also specified, then no input
       will be prompted after the file has been read.
 
   -c, --check-clean
-      Assert that the stack is empty and that the program explicitly at
+      Assert that the stack is empty and that the program explicitly exits, at
       the end of execution.
 
   -r, --check-retrieve
-      Assert that retrieved addresses are not above previously-stored
-      addresses.
+      Assert that retrieved addresses are not above previously-stored addresses.
 
   -h, --help
       Show usage.
