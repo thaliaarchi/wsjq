@@ -33,6 +33,9 @@ Options:
   -r, --check-retrieve
       Assert that retrieved addresses are not above previously-stored addresses.
 
+  --jq=<path>
+      Set the jq or gojq executable to use.
+
   -h, --help
       Show usage.
 "
@@ -52,6 +55,7 @@ on_eof=error
 no_prompt=false
 check_clean=false
 check_retrieve=false
+jq=jq
 
 while getopts ':hi:e:crn-:' optchar; do
   case "$optchar" in
@@ -65,6 +69,8 @@ while getopts ':hi:e:crn-:' optchar; do
         no-prompt)      no_prompt=true ;;
         check-clean)    check_clean=true ;;
         check-retrieve) check_retrieve=true ;;
+        jq)             jq="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        jq=*)           jq="${OPTARG#*=}" ;;
         *)              echo "Invalid option --$OPTARG" >&2; exit 2 ;;
       esac;;
     h) usage ;;
@@ -84,13 +90,14 @@ fi
 
 file="$1"
 if [ ! -f "$file" ]; then
-  echo "${0##*/}: No such file or directory: $file" >&2; exit 1
+  echo "${0##*/}: Program file not found: $file" >&2; exit 1
 fi
 if [ ! -f "$in_file" ] && [ "$in_file" != /dev/null ]; then
-  echo "${0##*/}: No such file or directory: $in_file" >&2; exit 1
+  echo "${0##*/}: Input file not found: $in_file" >&2; exit 1
 fi
 
-jq -njMR \
+jq="${jq/#\~/$HOME}"
+$jq -njMR \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
   --arg no_prompt "$no_prompt" \

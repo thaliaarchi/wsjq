@@ -7,13 +7,17 @@ written in jq.
 
 ```sh
 wsjq --help
+wsjq hworld.ws
 wsjq run hworld.ws
 whoami > name.txt
 wsjq debug --in-file=name.txt --no-prompt name.ws
 wsjq disasm fact.ws
+wsjq --jq=gojq hworld.ws
 ```
 
-wsjq has been tested with jq version 1.6.
+wsjq has been tested with jq version 1.6 and gojq commit
+[77b3bcd](https://github.com/itchyny/gojq/commit/77b3bcd8d460718540fc57f1e45f86ac7c6bb9ef)
+([gojq#186](https://github.com/itchyny/gojq/issues/186)).
 
 ## Real-time I/O
 
