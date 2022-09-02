@@ -15,9 +15,7 @@ wsjq disasm fact.ws
 wsjq --jq=gojq hworld.ws
 ```
 
-wsjq has been tested with jq version 1.6 and gojq commit
-[77b3bcd](https://github.com/itchyny/gojq/commit/77b3bcd8d460718540fc57f1e45f86ac7c6bb9ef)
-([gojq#186](https://github.com/itchyny/gojq/issues/186)).
+wsjq requires at least jq 1.6 or gojq 0.12.9 (for [gojq#186](https://github.com/itchyny/gojq/issues/186)).
 
 ## Real-time I/O
 
@@ -27,12 +25,14 @@ to be stdin so that user input is streamed line-by-line with `input`. The
 contents of the Whitespace source file are then bound to the `$src` variable
 with `--rawfile`.
 
-## Limitations
+## Limitations from jq
 
-- Integers have 53 bits of precision, because jq uses IEEE 754 64-bit floating
-  point.
-- readc collapses CRLF to LF on Windows, because `input` strips line endings
-  according to the current OS.
+When running with jq, integers have 53 bits of precision, because jq uses 64-bit
+floating point numbers, and `readc` collapses CRLF to LF on Windows, because
+`input` strips line endings according to the current OS.
+
+Run with gojq (`--jq=gojq`) to use arbitrary-precision integers and preserve
+line endings.
 
 ## See also
 
