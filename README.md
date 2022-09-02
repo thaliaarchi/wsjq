@@ -31,7 +31,6 @@ with `--rawfile`.
 
 - Integers have 53 bits of precision, because jq uses IEEE 754 64-bit floating
   point.
-- div and mod use truncated division, not floor division like Haskell.
 - readc collapses CRLF to LF on Windows, because `input` strips line endings
   according to the current OS.
 

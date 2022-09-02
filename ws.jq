@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Andrew Archibald
+# Copyright (c) 2021-2022 Andrew Archibald
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -204,6 +204,16 @@ def parse:
   del(.i, .pos, .tok) |
   .labels = label_map;
 
+def floor_div($x; $y):
+  ($x % $y) as $r |
+  (($x - $r) / $y) as $q |
+  if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
+  then $q - 1 else $q end;
+def floor_mod($x; $y):
+  ($x % $y) as $r |
+  if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
+  then $r + $y else $r end;
+
 def interpret_step(format_print; read_prefix):
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
@@ -262,8 +272,8 @@ def interpret_step(format_print; read_prefix):
   elif $t == "add"      then top2 += top | pop
   elif $t == "sub"      then top2 -= top | pop
   elif $t == "mul"      then top2 *= top | pop
-  elif $t == "div"      then assert_div | top2 = (top2 / top | trunc) | pop
-  elif $t == "mod"      then assert_div | top2 %= top | pop
+  elif $t == "div"      then assert_div | top2 = floor_div(top2; top) | pop
+  elif $t == "mod"      then assert_div | top2 = floor_mod(top2; top) | pop
   elif $t == "store"    then store(top2; top) | pop | pop
   elif $t == "retrieve" then top = retrieve(top)
   elif $t == "label"    then .
