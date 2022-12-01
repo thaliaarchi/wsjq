@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022 Andrew Archibald
+# Copyright (c) 2021-2022 Thalia Archibald
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -214,7 +214,7 @@ def floor_mod($x; $y):
   if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
   then $r + $y else $r end;
 
-def interpret_step(format_print; read_prefix):
+def interpret_step($debug):
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -233,12 +233,21 @@ def interpret_step(format_print; read_prefix):
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
 
+  def print(format):
+    (top | format) as $v |
+    if $debug then
+      (("print>"|bright_cyan) + " \($v | tojson)\n"),
+        (.out += ($v | tostring) | pop)
+    else ($v | tostring), pop end;
+  def read_prefix:
+    if $debug then "read<"|bright_cyan + " "
+    else empty end;
   def read:
     assert_len(1) |
-    if .in != "" or .eof then .
+    if .in_buf != "" or .eof then .
     else
       . as $state |
-      try (.in = input + "\n")
+      try (.in_buf = input + "\n")
       catch if . == "break" then $state.eof = true else error end
     end;
   def handle_eof:
@@ -246,14 +255,14 @@ def interpret_step(format_print; read_prefix):
       store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
     else inst_error("EOF") end;
   def readc:
-    read | if .in == "" then handle_eof else
-      store(top; (.in|explode)[0]) | pop |
-      .in_consumed += .in[:1] | .in |= .[1:]
+    read | if .in_buf == "" then handle_eof else
+      store(top; (.in_buf|explode)[0]) | pop |
+      .in_consumed += .in_buf[:1] | .in_buf |= .[1:]
     end;
   def readi:
-    read | if .in == "" then handle_eof else
-      (.in|index("\n")) as $i | .in[:$i] as $line |
-      .in_consumed += .in[:$i+1] | .in |= .[$i+1:] |
+    read | if .in_buf == "" then handle_eof else
+      (.in_buf|index("\n")) as $i | .in_buf[:$i] as $line |
+      .in_consumed += .in_buf[:$i+1] | .in_buf |= .[$i+1:] |
       (try ($line|tonumber) catch .5) as $n |
       assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
         "invalid integer " + ($line | tojson)) |
@@ -283,12 +292,12 @@ def interpret_step(format_print; read_prefix):
   elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
   elif $t == "ret"      then assert_ret | .pc = .c[-1] | .c |= .[:-1]
   elif $t == "end"      then .pc = (.prog|length)
-  elif $t == "printc"   then ([top] | implode | format_print), pop
-  elif $t == "printi"   then (top | format_print), pop
+  elif $t == "printc"   then print([.] | implode)
+  elif $t == "printi"   then print(.)
   elif $t == "readc"    then read_prefix, readc
   elif $t == "readi"    then read_prefix, readi
   else inst_error("malformed instruction") end;
-def interpret_step: interpret_step(tostring; empty);
+def interpret_step: interpret_step(false);
 
 def interpret_step_debug:
   def print_exit_status:
@@ -301,22 +310,21 @@ def interpret_step_debug:
   if .pc >= (.prog|length) then ("[interpreter stopped]\n"|red), .
   else
     .moved = true |
-    interpret_step(
-      ("print>"|bright_cyan) + " \(tojson)\n";
-      "read<"|bright_cyan + " ") |
+    interpret_step(true) |
     print_exit_status, .
   end;
 
 def interpret_init:
   . + {
-    pc: 0,           # program counter
-    pc0: 0,          # previous program counter
-    s: [],           # data stack
-    c: [],           # call stack
-    h: {},           # heap
-    in: ($in//""),   # stdin
-    in_consumed: "", # input consumed from stdin
-    max_addr: -1,    # maximum stored address
+    pc: 0,             # program counter
+    pc0: 0,            # previous program counter
+    s: [],             # data stack
+    c: [],             # call stack
+    h: {},             # heap
+    in_buf: ($in//""), # stdin buffer
+    in_consumed: "",   # input read from stdin
+    out: "",           # output written to stdout
+    max_addr: -1,      # maximum stored address
   };
 
 def interpret_continue:
@@ -330,8 +338,8 @@ def interpret_continue_debug:
     ("[stopped at breakpoint]\n"|red), .
   else interpret_step_debug | interpret_continue_debug end;
 
-def _interpret_next($verbose; $depth):
-  if $verbose then interpret_step_debug else interpret_step end |
+def _interpret_next($debug; $depth):
+  if $debug then interpret_step_debug else interpret_step end |
   if type != "object" or .pc >= (.prog|length) then .
   elif .moved and .breaks[.pc|tostring] then
     ("[stopped at breakpoint]\n"|red), .
@@ -340,7 +348,7 @@ def _interpret_next($verbose; $depth):
     (if $typ == "call" then $depth+1
       elif $typ == "ret" then $depth-1
       else $depth end) as $depth |
-    if $depth > 0 then _interpret_next($verbose; $depth) else . end
+    if $depth > 0 then _interpret_next($debug; $depth) else . end
   end;
 def interpret_next: _interpret_next(false; 0);
 def interpret_next_debug: _interpret_next(true; 0);
@@ -368,7 +376,8 @@ def debug:
     "  d, disasm     -- Disassemble program\n" +
     "  l, labels     -- List labels in program\n" +
     "  p, print      -- Dump the data stack, call stack, and heap\n" +
-    "  i, input      -- Dump the input consumed from stdin so far\n" +
+    "  i, input      -- Dump the input read from stdin so far\n" +
+    "  o, output     -- Dump the output written to stdout so far\n" +
     "  q, quit       -- Quit the debugger\n" +
     "  h, help       -- Show a list of all debugger commands\n";
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
@@ -397,8 +406,7 @@ def debug:
   def list_labels:
     [.prog[.labels | to_entries | sort_by(.value)[].value]] |
     disasm_pc_insts(false);
-  def print_input:
-    .in_consumed |
+  def print_io:
     if .[-1:] != "\n" then . + ("⏎\n"|bright_black) else . end;
   def _debug:
     if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
@@ -420,7 +428,8 @@ def debug:
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
     elif $c|iscmd("labels")     then list_labels, .
     elif $c|iscmd("print")      then dump_state, .
-    elif $c|iscmd("input")      then print_input, .
+    elif $c|iscmd("input")      then (.in_consumed | print_io), .
+    elif $c|iscmd("output")     then (.out | print_io), .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
     else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
