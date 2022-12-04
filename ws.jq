@@ -214,7 +214,7 @@ def floor_mod($x; $y):
   if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
   then $r + $y else $r end;
 
-def interpret_step($debug):
+def _interpret_step($debug):
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -233,14 +233,14 @@ def interpret_step($debug):
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
 
-  def print(format):
+  def print($op; format):
     (top | format) as $v |
     if $debug then
-      (("print>"|bright_cyan) + " \($v | tojson)\n"),
+      ($op+">"|bright_cyan + " \($v | tojson)\n"),
         (.out += ($v | tostring) | pop)
     else ($v | tostring), pop end;
-  def read_prefix:
-    if $debug then "read<"|bright_cyan + " "
+  def read_prefix($op):
+    if $debug then $op+"<"|bright_cyan + " "
     else empty end;
   def read:
     assert_len(1) |
@@ -292,12 +292,12 @@ def interpret_step($debug):
   elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
   elif $t == "ret"      then assert_ret | .pc = .c[-1] | .c |= .[:-1]
   elif $t == "end"      then .pc = (.prog|length)
-  elif $t == "printc"   then print([.] | implode)
-  elif $t == "printi"   then print(.)
-  elif $t == "readc"    then read_prefix, readc
-  elif $t == "readi"    then read_prefix, readi
+  elif $t == "printc"   then print("printc"; [.] | implode)
+  elif $t == "printi"   then print("printi"; .)
+  elif $t == "readc"    then read_prefix("readc"), readc
+  elif $t == "readi"    then read_prefix("readi"), readi
   else inst_error("malformed instruction") end;
-def interpret_step: interpret_step(false);
+def interpret_step: _interpret_step(false);
 
 def interpret_step_debug:
   def print_exit_status:
@@ -310,7 +310,7 @@ def interpret_step_debug:
   if .pc >= (.prog|length) then ("[interpreter stopped]\n"|red), .
   else
     .moved = true |
-    interpret_step(true) |
+    _interpret_step(true) |
     print_exit_status, .
   end;
 
