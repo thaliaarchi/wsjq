@@ -19,12 +19,12 @@ def inst_str:
 def inst_asm:
   if .typ == "label" then "\(.arg):"
   else "    \(inst_str)" end;
-def inst_asm_pc($mark; $w):
+def inst_asm_pc($mark; $width):
   if $mark then "\(.pc)#"|yellow else "\(.pc)-" end +
   if .typ == null then ""
   else
-    ([$w - (.pc|tostring|length), 0] | max + 1) as $w |
-    " " * $w + inst_asm
+    ([$width - (.pc|tostring|length), 0] | max + 1) as $width |
+    " " * $width + inst_asm
   end;
 
 def inst_line($pos):
@@ -51,15 +51,45 @@ def trace($pc; $n_before; $n_after):
   else .[$pc-$n_before:$pc+$n_after+1] end |
   disasm_pc_insts(.pc == $pc);
 def trace($pc; $n): trace($pc; $n; $n);
+
+def dump_stack: .s | join(", ");
+def dump_calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
+def dump_heap_map:
+  [(.h | keys_unsorted | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
+  join(", ");
+def dump_heap_table($cols):
+  (.h | map(tostring | length) | max + 1) as $cell_width |
+  (.h | keys_unsorted | map(length) | max + 1) as $addr_width |
+  reduce (.h | to_entries[]) as $v ({};
+    ($v.key|tonumber) as $key |
+    ($key % $cols) as $col | (($key - $col) / $cols | tostring) as $row |
+    .[$row] |= (. // []) |
+    .[$row][$col] = $v.value) |
+  reduce (keys_unsorted[] | tonumber) as $row (.;
+    if .[$row+1|tostring] == null then
+      .[$row+1|tostring] = if .[$row+2|tostring] != null then [] else null end
+    else . end) |
+  def pad_right($width): tostring | . + " " * ($width - length);
+  def format_cells:
+    if . == null or length == 0 then ""
+    else
+      map(. // "" | pad_right($cell_width)) |
+      " " + join("") | gsub(" +$"; "")
+    end;
+  (" " * ($addr_width + 1)) as $empty_addr |
+  $empty_addr + ([range($cols)] | format_cells) + "\n" +
+  $empty_addr + "_" * ($cell_width * $cols + 1) + "\n" +
+  (to_entries | sort_by(.key|tonumber)[:-1] |
+    map(
+      (if .value != null then .key|tonumber * $cols else "…" end) as $addr |
+      ($addr | pad_right($addr_width)) +
+      "|" + (.value | format_cells) + "\n") |
+    join(""));
 def dump_state:
-  def stack: .s | join(", ");
-  def calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
-  def heap:
-    [(.h | keys | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
-    join(", ");
-  "Stack: [\(stack)]\n" +
-  "Calls: [\(calls)]\n" +
-  "Heap:  {\(heap)}\n";
+  "Stack: [\(dump_stack)]\n" +
+  "Calls: [\(dump_calls)]\n" +
+  "Heap:  {\(dump_heap_map)}\n" +
+  "\(dump_heap_table(10))";
 
 def prefix_error: ("Error:"|bright_red) + " " + .;
 def inst_error($msg; $inst; $pc):
