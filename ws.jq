@@ -239,35 +239,32 @@ def _interpret_step($debug):
       ($op+">"|bright_cyan + " \($v | tojson)\n"),
         (.out += ($v | tostring) | pop)
     else ($v | tostring), pop end;
-  def read_prefix($op):
-    if $debug then $op+"<"|bright_cyan + " "
-    else empty end;
-  def read:
+  def read(handle_read):
     assert_len(1) |
     if .in_buf != "" or .eof then .
     else
-      . as $state |
-      try (.in_buf = input + "\n")
-      catch if . == "break" then $state.eof = true else error end
+      if $debug then "read<"|bright_cyan + " " else empty end,
+      (. as $state |
+        try (.in_buf = input + "\n")
+        catch if . == "break" then $state.eof = true else error end)
+    end |
+    if type != "object" then .
+    else
+      if .in_buf != "" then handle_read
+      elif .on_eof|type == "number" then
+        store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
+      else inst_error("EOF") end
     end;
-  def handle_eof:
-    if .on_eof|type == "number" then
-      store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
-    else inst_error("EOF") end;
   def readc:
-    read | if .in_buf == "" then handle_eof else
-      store(top; (.in_buf|explode)[0]) | pop |
-      .in_consumed += .in_buf[:1] | .in_buf |= .[1:]
-    end;
+    store(top; (.in_buf|explode)[0]) | pop |
+    .in_consumed += .in_buf[:1] | .in_buf |= .[1:];
   def readi:
-    read | if .in_buf == "" then handle_eof else
-      (.in_buf|index("\n")) as $i | .in_buf[:$i] as $line |
-      .in_consumed += .in_buf[:$i+1] | .in_buf |= .[$i+1:] |
-      (try ($line|tonumber) catch .5) as $n |
-      assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
-        "invalid integer " + ($line | tojson)) |
-      store(top; $n) | pop
-    end;
+    (.in_buf|index("\n")) as $i | .in_buf[:$i] as $line |
+    .in_consumed += .in_buf[:$i+1] | .in_buf |= .[$i+1:] |
+    (try ($line|tonumber) catch .5) as $n |
+    assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
+      "invalid integer " + ($line | tojson)) |
+    store(top; $n) | pop;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
   .prog[.pc] as $inst | $inst as {typ:$t, arg:$n} |
@@ -294,8 +291,8 @@ def _interpret_step($debug):
   elif $t == "end"      then .pc = (.prog|length)
   elif $t == "printc"   then print("printc"; [.] | implode)
   elif $t == "printi"   then print("printi"; .)
-  elif $t == "readc"    then read_prefix("readc"), readc
-  elif $t == "readi"    then read_prefix("readi"), readi
+  elif $t == "readc"    then read(readc)
+  elif $t == "readi"    then read(readi)
   else inst_error("malformed instruction") end;
 def interpret_step: _interpret_step(false);
 
