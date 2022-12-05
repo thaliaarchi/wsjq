@@ -19,13 +19,16 @@ def inst_str:
 def inst_asm:
   if .typ == "label" then "\(.arg):"
   else "    \(inst_str)" end;
-def inst_asm_pc($mark; $width):
-  if $mark then "\(.pc)#"|yellow else "\(.pc)-" end +
+def inst_asm_pc($pc; $breaks; $width):
+  if .pc == $pc then "\(.pc)#"|yellow
+  elif .pc|tostring | in($breaks) then
+    if $breaks[.pc|tostring] then "\(.pc)*"|red else "\(.pc)*" end
+  else "\(.pc)-" end +
   if .typ == null then ""
   else
     ([$width - (.pc|tostring|length), 0] | max + 1) as $width |
     " " * $width + inst_asm
-  end;
+  end + "\n";
 
 def inst_line($pos):
   .lines |
@@ -39,17 +42,18 @@ def prog_with_eof:
 
 def disasm:
   [.prog[] | inst_asm + "\n"] | join("");
-def disasm_pc_insts(mark):
+def disasm_pc_insts($pc; $breaks):
   (last.pc|tostring|length) as $w |
-  map(inst_asm_pc(mark; $w) + "\n") | join("");
-def disasm_pc(mark):
-  prog_with_eof | disasm_pc_insts(mark);
-def disasm_pc: disasm_pc(false);
+  map(inst_asm_pc($pc; $breaks; $w)) | join("");
+def disasm_pc:
+  . as $state |
+  prog_with_eof | disasm_pc_insts($state.pc; $state.breaks);
 def trace($pc; $n_before; $n_after):
+  .breaks as $breaks |
   prog_with_eof |
   if $pc < $n_before then .[:$pc+$n_after+1]
   else .[$pc-$n_before:$pc+$n_after+1] end |
-  disasm_pc_insts(.pc == $pc);
+  disasm_pc_insts($pc; $breaks);
 def trace($pc; $n): trace($pc; $n; $n);
 
 def dump_stack: .s | join(", ");
@@ -425,13 +429,14 @@ def debug:
       end
     else . end |
     if type == "object" then
-      (.breaks | to_entries | sort_by(.key|tonumber)[]) as $b |
-      .prog[$b.key|tonumber] | inst_asm_pc(false; 0) |
-      if $b.value then green else red end + "\n"
+      .breaks as $breaks |
+      (.breaks | keys_unsorted | map(tonumber) | sort[]) as $b |
+      .prog[$b] | inst_asm_pc(-1; $breaks; 0)
     else empty end, .;
   def list_labels:
+    . as $state |
     [.prog[.labels | to_entries | sort_by(.value)[].value]] |
-    disasm_pc_insts(false);
+    disasm_pc_insts($state.pc; $state.breaks);
   def print_io:
     if .[-1:] != "\n" then . + ("⏎\n"|bright_black) else . end;
 
@@ -453,7 +458,7 @@ def debug:
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next
     elif $c|iscmd("breakpoint") then breakpoint($args)
-    elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
+    elif $c|iscmd("disasm")     then disasm_pc, .
     elif $c|iscmd("labels")     then list_labels, .
     elif $c|iscmd("print")      then dump_state, .
     elif $c|iscmd("input")      then (.in_consumed | print_io), .
@@ -467,7 +472,7 @@ def debug:
   . + {
     debug: true, # debugger mode
     cmd: "",     # previous debug command
-    breaks: {},  # key: breakpoint pc, value: boolean status
+    breaks: {},  # breakpoints (key: pc, value: enabled boolean)
     moved: true, # whether the last command moved pc
   } |
   interpret_init | _debug;
