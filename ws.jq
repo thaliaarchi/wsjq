@@ -214,7 +214,7 @@ def floor_mod($x; $y):
   if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
   then $r + $y else $r end;
 
-def _interpret_step($debug):
+def interpret_step:
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -235,7 +235,7 @@ def _interpret_step($debug):
 
   def print($op; format):
     (top | format) as $v |
-    if $debug then
+    if .debug then
       ($op+">"|bright_cyan + " \($v | tojson)\n"),
         (.out += ($v | tostring) | pop)
     else ($v | tostring), pop end;
@@ -243,7 +243,7 @@ def _interpret_step($debug):
     assert_len(1) |
     if .in_buf != "" or .eof then .
     else
-      if $debug then "read<"|bright_cyan + " " else empty end,
+      if .debug then "read<"|bright_cyan + " " else empty end,
       (. as $state |
         try (.in_buf = input + "\n")
         catch if . == "break" then $state.eof = true else error end)
@@ -294,7 +294,6 @@ def _interpret_step($debug):
   elif $t == "readc"    then read(readc)
   elif $t == "readi"    then read(readi)
   else inst_error("malformed instruction") end;
-def interpret_step: _interpret_step(false);
 
 def interpret_step_debug:
   def print_exit_status:
@@ -307,7 +306,7 @@ def interpret_step_debug:
   if .pc >= (.prog|length) then ("[interpreter stopped]\n"|red), .
   else
     .moved = true |
-    _interpret_step(true) |
+    interpret_step |
     print_exit_status, .
   end;
 
@@ -335,20 +334,20 @@ def interpret_continue_debug:
     ("[stopped at breakpoint]\n"|red), .
   else interpret_step_debug | interpret_continue_debug end;
 
-def _interpret_next($debug; $depth):
-  if $debug then interpret_step_debug else interpret_step end |
-  if type != "object" or .pc >= (.prog|length) then .
-  elif .moved and .breaks[.pc|tostring] then
-    ("[stopped at breakpoint]\n"|red), .
-  else
-    .prog[.pc0].typ as $typ |
-    (if $typ == "call" then $depth+1
-      elif $typ == "ret" then $depth-1
-      else $depth end) as $depth |
-    if $depth > 0 then _interpret_next($debug; $depth) else . end
-  end;
-def interpret_next: _interpret_next(false; 0);
-def interpret_next_debug: _interpret_next(true; 0);
+def interpret_next:
+  def _next($depth):
+    if .debug then interpret_step_debug else interpret_step end |
+    if type != "object" or .pc >= (.prog|length) then .
+    elif .moved and .breaks[.pc|tostring] then
+      ("[stopped at breakpoint]\n"|red), .
+    else
+      .prog[.pc0].typ as $typ |
+      (if $typ == "call" then $depth+1
+        elif $typ == "ret" then $depth-1
+        else $depth end) as $depth |
+      if $depth > 0 then _next($depth) else . end
+    end;
+  _next(0);
 
 def check_clean_exit:
   if type == "object" and .check_clean then
@@ -377,7 +376,7 @@ def debug:
     "  o, output     -- Dump the output written to stdout so far\n" +
     "  q, quit       -- Quit the debugger\n" +
     "  h, help       -- Show a list of all debugger commands\n";
-  def iscmd($cmd): . == $cmd or . == $cmd[:1];
+
   def run:
     if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
@@ -405,6 +404,8 @@ def debug:
     disasm_pc_insts(false);
   def print_io:
     if .[-1:] != "\n" then . + ("⏎\n"|bright_black) else . end;
+
+  def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def _debug:
     if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
     else empty end,
@@ -420,7 +421,7 @@ def debug:
     elif $c|iscmd("run")        then .cmd = "" | run
     elif $c|iscmd("continue")   then .cmd = "" | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
-    elif $c|iscmd("next")       then .cmd = $cmd | interpret_next_debug
+    elif $c|iscmd("next")       then .cmd = $cmd | interpret_next
     elif $c|iscmd("breakpoint") then breakpoint($args)
     elif $c|iscmd("disasm")     then .pc as $pc | disasm_pc(.pc == $pc), .
     elif $c|iscmd("labels")     then list_labels, .
@@ -432,7 +433,9 @@ def debug:
     else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
     if type != "object" then .
     else _debug end);
+
   . + {
+    debug: true, # debugger mode
     cmd: "",     # previous debug command
     breaks: {},  # key: breakpoint pc, value: boolean status
     moved: true, # whether the last command moved pc
