@@ -454,7 +454,7 @@ def debug:
     .moved = false |
     if   $c == ""               then .
     elif $c|iscmd("run")        then .cmd = "" | run
-    elif $c|iscmd("continue")   then .cmd = "" | interpret_continue_debug
+    elif $c|iscmd("continue")   then .cmd = $cmd | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next
     elif $c|iscmd("breakpoint") then breakpoint($args)
