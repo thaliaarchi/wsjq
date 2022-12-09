@@ -262,17 +262,21 @@ def interpret_step:
     .h[$addr|tostring] = $val;
   def retrieve($addr):
     assert((.check_retrieve|not) or $addr <= .max_addr;
-      "retrieve above maximum stored address") |
+      "retrieve above maximum stored address (\($addr) > \(.max_addr))") |
     .h[$addr|tostring] // 0;
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
 
   def print($op; format):
-    (top | format) as $v |
+    format as $v |
     if .debug then
       ($op+">"|bright_cyan + " \($v | tojson)\n"),
         (.out += ($v | tostring) | pop)
     else ($v | tostring), pop end;
+  def printc:
+    top as $c |
+    assert($c >= 0 and $c <= 1114111; "printing invalid codepoint (\($c))") |
+    [$c] | implode;
   def read(handle_read):
     assert_len(1) |
     if .in_buf != "" or .eof then .
@@ -323,8 +327,8 @@ def interpret_step:
   elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
   elif $t == "ret"      then assert_ret | .pc = .c[-1] | .c |= .[:-1]
   elif $t == "end"      then .pc = (.prog|length)
-  elif $t == "printc"   then print("printc"; [.] | implode)
-  elif $t == "printi"   then print("printi"; .)
+  elif $t == "printc"   then print("printc"; printc)
+  elif $t == "printi"   then print("printi"; top)
   elif $t == "readc"    then read(readc)
   elif $t == "readi"    then read(readi)
   else inst_error("malformed instruction") end;
