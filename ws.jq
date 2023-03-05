@@ -150,6 +150,7 @@ def parse_inst:
   def inst($typ): .prog += [{typ:$typ, pos, pc:.prog|length}];
   def inst_num($typ):
     .n = 0 | match_char(parse_num; parse_num | .n*=-1; .) |
+    if .n == 0 then .n = 0 else . end | # Normalize -0
     .prog += [{typ:$typ, arg:.n, pos, pc:.prog|length}] |
     del(.n);
   def inst_lbl($typ):
