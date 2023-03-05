@@ -284,7 +284,7 @@ def interpret_step:
       if .debug then "read<"|bright_cyan + " " else empty end,
       (. as $state |
         try (.in_buf = input + "\n")
-        catch if . == "break" then $state.eof = true else error end)
+        catch if . == "break" then $state | .eof = true else error end)
     end |
     if type != "object" then .
     else
