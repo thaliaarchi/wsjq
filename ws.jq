@@ -217,7 +217,13 @@ def parse_inst:
         inst_lbl("jn");     # LTT l jn
         inst("ret"));       # LTL   ret
       match_char(
-        inst_err;
+        match_char(
+          match_char(
+            inst("dumpstack"); # LLSSS dumpstack
+            inst("dumpheap");  # LLSST dumpheap
+            inst_err);
+          inst_err;
+          inst_err);
         inst_err;
         inst("end"));       # LLL   end
       .); # allow trailing LF
@@ -260,11 +266,15 @@ def stat:
   }) as $token_counts |
   (if $inst_counts.copy != null or $inst_counts.slide != null
    then "0.3" else "0.2" end) as $spec_version |
+  ([if $inst_counts.dumpstack != null then "debug_printstack" else empty end,
+    if $inst_counts.dumpheap != null then "debug_printheap" else empty end])
+    as $nonstandard |
   {
     filename: $filename,
     program: .prog,
     labels,
     spec_version: $spec_version,
+    nonstandard: $nonstandard,
     inst_counts: $inst_counts,
     token_counts: $token_counts,
   };
@@ -362,6 +372,8 @@ def interpret_step:
   elif $t == "printi"   then print("printi"; top)
   elif $t == "readc"    then read(readc)
   elif $t == "readi"    then read(readi)
+  elif $t == "dumpstack"then "Stack: [\(dump_stack)]\n", .
+  elif $t == "dumpheap" then "Heap: {\(dump_heap_map)}\n", .
   else inst_error("malformed instruction") end;
 
 def interpret_step_debug:
