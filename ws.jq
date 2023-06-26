@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022 Thalia Archibald
+# Copyright (c) 2021-2023 Thalia Archibald
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -15,30 +15,32 @@ def cyan:    color(36); def bright_cyan:    color(96);
 def white:   color(37); def bright_white:   color(97);
 
 def inst_str:
-  if .arg != null then "\(.typ) \(.arg)" else .typ end;
+  if .arg != null then "\(.opcode) \(.arg)" else .opcode end;
 def inst_asm:
-  if .typ == "label" then "\(.arg):"
+  if .opcode == "label" then "\(.arg):"
   else "    \(inst_str)" end;
 def inst_asm_pc($pc; $breaks; $width):
   if .pc == $pc then "\(.pc)#"|yellow
   elif .pc|tostring | in($breaks) then
     if $breaks[.pc|tostring] then "\(.pc)*"|red else "\(.pc)*" end
   else "\(.pc)-" end +
-  if .typ == null then ""
+  if .opcode == null then ""
   else
     ([$width - (.pc|tostring|length), 0] | max + 1) as $width |
     " " * $width + inst_asm
   end + "\n";
 
-def inst_line($pos):
+def inst_pos($offset):
   .lines |
-  bsearch($pos) as $i |
+  bsearch($offset) as $i |
   (if $i < 0 then -(2+$i) else $i end) as $i |
-  "\($i+1):\($pos-.[$i]+1)";
+  {line: ($i+1), col: ($offset-.[$i]+1)};
+def inst_pos_str($offset):
+  inst_pos($offset) | "\(.line):\(.col)";
 
 def prog_with_eof:
   if .i != null and .i < (.src|length) then .prog
-  else .prog + [{pos:.src|length, pc:.prog|length}] end;
+  else .prog + [{offset:.src|length, pc:.prog|length}] end;
 
 def disasm:
   [.prog[] | inst_asm + "\n"] | join("");
@@ -100,8 +102,8 @@ def inst_error($msg; $inst; $pc):
   ($pc // .pc0 // .prog|length) as $pc |
   ($inst // .prog[$pc]) as $inst |
   ($msg|prefix_error)
-  + if $inst.pos != null then
-      " at \(inst_line($inst.pos)) (offset \($inst.pos))" else "" end
+  + if $inst.offset != null then
+      " at \(inst_pos_str($inst.offset)) (offset \($inst.offset))" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
   + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end
   + if .pc != null then "\n" + dump_state else "" end |
@@ -113,16 +115,20 @@ def assert($cond; msg; inst):
   if $cond then . else inst_error(msg; inst) end;
 def assert($cond; msg): assert($cond; msg; null);
 
+def S: 32;
+def T: 9;
+def L: 10;
+
 def match_char(s; t; l; eof):
   .src[.i] as $ch | .i+=1 |
-  if   $ch == 32 then .tok += "[Space]" | s
-  elif $ch == 9  then .tok += "[Tab]"   | t
-  elif $ch == 10 then .tok += "[LF]"    | .lines += [.i] | l
+  if   $ch == S then .tok += "[Space]" | s
+  elif $ch == T then .tok += "[Tab]"   | t
+  elif $ch == L then .tok += "[LF]"    | .lines += [.i] | l
   elif .i >= (.src|length) then eof
   else match_char(s; t; l; eof) end;
 def match_char(s; t; l):
   match_char(s; t; l;
-    inst_error("unexpected EOF"; {typ:(.tok+"[EOF]"), pos:(.i-1)}));
+    inst_error("unexpected EOF"; {opcode:(.tok+"[EOF]"), offset:(.i-1)}));
 
 def parse_inst:
   def parse_num:
@@ -147,19 +153,19 @@ def parse_inst:
     elif length > 1 and .[0] == 0 then "%b\(join(""))"
     else "%\($n)" end;
 
-  def inst($typ): .prog += [{typ:$typ, pos, pc:.prog|length}];
-  def inst_num($typ):
+  def inst($opcode): .prog += [{opcode:$opcode, offset, pc:.prog|length}];
+  def inst_num($opcode):
     .n = 0 | match_char(parse_num; parse_num | .n*=-1; .) |
     if .n == 0 then .n = 0 else . end | # Normalize -0
-    .prog += [{typ:$typ, arg:.n, pos, pc:.prog|length}] |
+    .prog += [{opcode:$opcode, arg:.n, offset, pc:.prog|length}] |
     del(.n);
-  def inst_lbl($typ):
+  def inst_lbl($opcode):
     .n = 0 | .l = [] | parse_lbl |
-    .prog += [{typ:$typ, arg:lbl_str, pos, pc:.prog|length}] |
+    .prog += [{opcode:$opcode, arg:lbl_str, offset, pc:.prog|length}] |
     del(.n, .l);
-  def inst_err: inst_error("unrecognized instruction"; {typ:.tok, pos});
+  def inst_err: inst_error("unrecognized instruction"; {opcode:.tok, offset});
 
-  .pos = .i | .tok = "" |
+  .offset = .i | .tok = "" |
   match_char(
     # Stack
     match_char(
@@ -219,7 +225,7 @@ def parse_inst:
 
 def label_map:
   . as $state |
-  reduce (.prog[] | select(.typ == "label")) as $inst
+  reduce (.prog[] | select(.opcode == "label")) as $inst
     ({}; . as $labels |($inst.arg|tostring) as $lbl |
       $state | assert($labels[$lbl] == null; "label redefined"; $inst) |
       $labels | .[$lbl] = $inst.pc);
@@ -228,7 +234,7 @@ def parse:
   {
     src: explode, # program source
     i: 0,         # read offset
-    pos: 0,       # instruction start offset
+    offset: 0,    # instruction start offset
     tok: "",      # current token
     lines: [0],   # offsets of lines
     prog: [],     # instructions
@@ -236,8 +242,32 @@ def parse:
   def _parse:
     if .i < (.src|length) then parse_inst | _parse else . end;
   _parse |
-  del(.i, .pos, .tok) |
+  del(.i, .offset, .tok) |
   .labels = label_map;
+
+def stat:
+  . as $state |
+  .prog |= map(.offset as $offset | . * ($state | inst_pos($offset))) |
+  (.prog |
+    group_by(.opcode) |
+    map({key:.[0].opcode, value:length}) |
+    sort_by([-.value, .key]) | from_entries
+  ) as $inst_counts |
+  (.src | {
+    space: (map(select(. == S)) | length),
+    tab:   (map(select(. == T)) | length),
+    lf:    (map(select(. == L)) | length),
+  }) as $token_counts |
+  (if $inst_counts.copy != null or $inst_counts.slide != null
+   then "0.3" else "0.2" end) as $spec_version |
+  {
+    filename: $filename,
+    program: .prog,
+    labels,
+    spec_version: $spec_version,
+    inst_counts: $inst_counts,
+    token_counts: $token_counts,
+  };
 
 def floor_div($x; $y):
   ($x % $y) as $r |
@@ -306,7 +336,7 @@ def interpret_step:
     store(top; $n) | pop;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
-  .prog[.pc] as $inst | $inst as {typ:$t, arg:$n} |
+  .prog[.pc] as $inst | $inst as {opcode:$t, arg:$n} |
   .pc0 = .pc | .pc += 1 |
   if   $t == "push"     then push($n)
   elif $t == "dup"      then push(top)
@@ -338,7 +368,7 @@ def interpret_step_debug:
   def print_exit_status:
     if type != "object" or .pc < (.prog|length) then empty
     else
-      if .prog[.pc0].typ == "end"
+      if .prog[.pc0].opcode == "end"
       then "[program exited cleanly]\n"|green
       else "[program exited implicitly]\n"|red end
     end;
@@ -380,9 +410,9 @@ def interpret_next:
     elif .moved and .breaks[.pc|tostring] then
       ("[stopped at breakpoint]\n"|red), .
     else
-      .prog[.pc0].typ as $typ |
-      (if $typ == "call" then $depth+1
-        elif $typ == "ret" then $depth-1
+      .prog[.pc0].opcode as $opcode |
+      (if $opcode == "call" then $depth+1
+        elif $opcode == "ret" then $depth-1
         else $depth end) as $depth |
       if $depth > 0 then _next($depth) else . end
     end;
@@ -390,9 +420,9 @@ def interpret_next:
 
 def check_clean_exit:
   if type == "object" and .check_clean then
-    if .prog[.pc0].typ != "end" and (.s|length != 0) then
+    if .prog[.pc0].opcode != "end" and (.s|length != 0) then
       inst_error("exited implicitly with non-empty stack")
-    elif .prog[.pc0].typ != "end" then
+    elif .prog[.pc0].opcode != "end" then
       inst_error("exited implicitly")
     elif .s|length != 0 then
       inst_error("exited with non-empty stack")

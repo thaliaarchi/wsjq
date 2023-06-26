@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022 Thalia Archibald
+# Copyright (c) 2021-2023 Thalia Archibald
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -17,9 +17,11 @@ $src | parse |
 .eof = $no_prompt == "true" |
 .check_clean = $check_clean == "true" |
 .check_retrieve = $check_retrieve == "true" |
+.filename = $filename |
 if   $mode == "run"    then interpret
 elif $mode == "debug"  then debug
 elif $mode == "disasm" then disasm_pc
+elif $mode == "parse"  then stat
 else "\($mode|tojson) is not a valid mode\n" | halt_error(2)
 end |
-select(type == "string")
+if $mode != "parse" then select(type == "string") else . end

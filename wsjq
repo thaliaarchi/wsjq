@@ -1,18 +1,22 @@
 #!/bin/bash
-# Copyright (c) 2021-2022 Thalia Archibald
+# Copyright (c) 2021-2023 Thalia Archibald
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+set -euo pipefail
 
-USAGE="usage: ${0##*/} [<mode>] [<options>] <file>
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+SCRIPT_NAME="${0##*/}"
+
+USAGE="Usage: $SCRIPT_NAME [<mode>] [<options>] <file>
 
 Modes:
   run    -- Run the program (default)
   debug  -- Run the program in the debugger
   disasm -- Disassemble the program
+  parse  -- Dump the parsed program and stats
 
 Options:
   -i, --in-file=<in_file>
@@ -41,12 +45,12 @@ Options:
 "
 
 usage() {
-  echo -n "$USAGE" 2>&2
+  echo -n "$USAGE" >&2
   exit 2
 }
 
 mode=run
-if [ "$1" = run ] || [ "$1" = debug ] || [ "$1" = disasm ]; then
+if [[ $# != 0 && ($1 = run || $1 = debug || $1 = disasm || $1 = parse) ]]; then
   mode="$1"
   shift
 fi
@@ -57,7 +61,7 @@ check_clean=false
 check_retrieve=false
 jq=jq
 
-while getopts ':hi:e:crn-:' optchar; do
+while getopts ':hi:e:ncr-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
@@ -84,25 +88,31 @@ while getopts ':hi:e:crn-:' optchar; do
 done
 shift $((OPTIND-1))
 
-if [ $# -ne 1 ]; then
+if [[ $# -ne 1 ]]; then
   usage
 fi
 
 file="$1"
-if [ ! -f "$file" ]; then
-  echo "${0##*/}: Program file not found: $file" >&2; exit 1
+if [[ ! -f $file ]]; then
+  echo "$SCRIPT_NAME: Program file not found: $file" >&2; exit 1
 fi
-if [ ! -f "$in_file" ] && [ "$in_file" != /dev/null ]; then
-  echo "${0##*/}: Input file not found: $in_file" >&2; exit 1
+if [[ ! -f $in_file && $in_file != /dev/null ]]; then
+  echo "$SCRIPT_NAME: Input file not found: $in_file" >&2; exit 1
 fi
 
 jq="${jq/#\~/$HOME}"
-$jq -njMR \
+options=-njMR
+if [[ $mode = parse ]]; then
+  options=-nR
+fi
+
+$jq $options \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
   --arg no_prompt "$no_prompt" \
   --arg check_clean "$check_clean" \
   --arg check_retrieve "$check_retrieve" \
+  --arg filename "$file" \
   --rawfile src "$file" \
   --rawfile in "$in_file" \
   -L "$SCRIPT_DIR" \
