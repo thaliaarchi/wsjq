@@ -61,17 +61,17 @@ def trace($pc; $n): trace($pc; $n; $n);
 def dump_stack: .s | join(", ");
 def dump_calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
 def dump_heap_map:
-  [(.h | keys_unsorted | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
+  [(.h | keys | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
   join(", ");
 def dump_heap_table($cols):
   (.h | map(tostring | length) | max + 1) as $cell_width |
-  (.h | keys_unsorted | map(length) | max + 1) as $addr_width |
+  (.h | keys | map(length) | max + 1) as $addr_width |
   reduce (.h | to_entries[]) as $v ({};
     ($v.key|tonumber) as $key |
     ($key % $cols) as $col | (($key - $col) / $cols | tostring) as $row |
     .[$row] |= (. // []) |
     .[$row][$col] = $v.value) |
-  reduce (keys_unsorted[] | tonumber) as $row (.;
+  reduce (keys[] | tonumber) as $row (.;
     if .[$row+1|tostring] == null then
       .[$row+1|tostring] = if .[$row+2|tostring] != null then [] else null end
     else . end) |
@@ -477,7 +477,7 @@ def debug:
     else . end |
     if type == "object" then
       .breaks as $breaks |
-      (.breaks | keys_unsorted | map(tonumber) | sort[]) as $b |
+      (.breaks | keys | map(tonumber) | sort[]) as $b |
       .prog[$b] | inst_asm_pc(-1; $breaks; 0)
     else empty end, .;
   def list_labels:
