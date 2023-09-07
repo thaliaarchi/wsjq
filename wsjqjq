@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Copyright (c) 2021-2024 Thalia Archibald
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+SCRIPT_NAME="${0##*/}"
+
+USAGE="Usage: $SCRIPT_NAME [<mode>] [<options>] <file>
+
+Modes:
+  run    -- Run the program (default)
+  debug  -- Run the program in the debugger
+  disasm -- Disassemble the program
+  parse  -- Dump the parsed program and stats
+
+Options:
+  -i, --in-file=<in_file>
+      Read from <in_file> for the initial input, then from stdin.
+
+  -e, --on-eof=<behavior>
+      Set EOF-handling behavior, which can be \"error\" (default; like wspace)
+      or an integer (e.g., 0 or -1).
+
+  -n, --no-prompt
+      Do not prompt for input. If --in-file is also specified, then no input
+      will be prompted after the file has been read.
+
+  -c, --check-clean
+      Assert that the stack is empty and that the program explicitly exits, at
+      the end of execution.
+
+  -r, --check-retrieve
+      Assert that retrieved addresses are not above previously-stored addresses.
+
+  -p, --print-pc
+      Prefix disassembled instructions with the instruction index.
+
+  --jq=<path>
+      Set the jq or gojq executable to use.
+
+  -h, --help
+      Show usage.
+"
+
+usage() {
+  echo -n "$USAGE" >&2
+  exit 2
+}
+
+mode=run
+if [[ $# != 0 && ($1 = run || $1 = debug || $1 = disasm || $1 = parse) ]]; then
+  mode="$1"
+  shift
+fi
+in_file=/dev/null
+on_eof=error
+no_prompt=false
+check_clean=false
+check_retrieve=false
+print_pc=false
+jq=jq
+
+while getopts ':hi:e:ncrp-:' optchar; do
+  case "$optchar" in
+    -)
+      case "$OPTARG" in
+        help)           usage ;;
+        in-file)        in_file="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        in-file=*)      in_file="${OPTARG#*=}" ;;
+        on-eof)         on_eof="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        on-eof=*)       on_eof="${OPTARG#*=}" ;;
+        no-prompt)      no_prompt=true ;;
+        check-clean)    check_clean=true ;;
+        check-retrieve) check_retrieve=true ;;
+        print-pc)       print_pc=true ;;
+        jq)             jq="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        jq=*)           jq="${OPTARG#*=}" ;;
+        *)              echo "Invalid option --$OPTARG" >&2; exit 2 ;;
+      esac;;
+    h) usage ;;
+    i) in_file="$OPTARG" ;;
+    e) on_eof="$OPTARG" ;;
+    n) no_prompt=true ;;
+    c) check_clean=true ;;
+    r) check_retrieve=true ;;
+    p) print_pc=true ;;
+    *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
+  esac
+done
+shift $((OPTIND-1))
+
+if [[ $# -ne 1 ]]; then
+  usage
+fi
+
+file="$1"
+if [[ ! -f $file ]]; then
+  echo "$SCRIPT_NAME: Program file not found: $file" >&2; exit 1
+fi
+if [[ ! -f $in_file && $in_file != /dev/null ]]; then
+  echo "$SCRIPT_NAME: Input file not found: $in_file" >&2; exit 1
+fi
+
+jq="${jq/#\~/$HOME}"
+options=(-njMR)
+if [[ $mode = parse ]]; then
+  options=(-nR)
+fi
+if [[ ! "$jq" == *gojq ]]; then
+  options+=(--unbuffered)
+fi
+
+"$jq" "${options[@]}" \
+  --arg mode "$mode" \
+  --arg on_eof "$on_eof" \
+  --arg no_prompt "$no_prompt" \
+  --arg check_clean "$check_clean" \
+  --arg check_retrieve "$check_retrieve" \
+  --arg print_pc "$print_pc" \
+  --arg filename "$file" \
+  --rawfile src "$file" \
+  --rawfile in "$in_file" \
+  -L "$SCRIPT_DIR" \
+  -f "$SCRIPT_DIR/main.jq"
