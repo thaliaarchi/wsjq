@@ -17,6 +17,9 @@ wsjq --jq=gojq hworld.ws
 
 wsjq requires at least jq 1.6 or gojq 0.12.9 (for [gojq#186](https://github.com/itchyny/gojq/issues/186)).
 
+To run it with [jqjq](https://github.com/wader/jqjq), checkout the [jqjq-compat](https://github.com/thaliaarchi/wsjq/tree/jqjq-compat)
+branch and use `wsjqjq` instead of `wsjq`.
+
 ## Real-time I/O
 
 wsjq prints to stdout by generating a stream of strings that are immediately
