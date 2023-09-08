@@ -63,7 +63,7 @@ no_prompt=false
 check_clean=false
 check_retrieve=false
 jq=jq
-jqjq=jqjq
+jqjq="$(which jqjq || echo jqjq)"
 
 while getopts ':hi:e:ncr-:' optchar; do
   case "$optchar" in
@@ -108,6 +108,7 @@ fi
 
 jq="${jq/#\~/$HOME}"
 jqjq="${jqjq/#\~/$HOME}"
+jqjq_dir="$(dirname "$(realpath "$jqjq")")"
 
 # jqjq does not support environment args, so quote them with jq.
 env="$("$jq" -nr \
@@ -138,6 +139,13 @@ $(cat "$SCRIPT_DIR/ws.jq")
 
 $(sed '/^include /d' "$SCRIPT_DIR/main.jq")"
 
-# Quote inputs with jq, to work around jqjq not having -R.
-"$jq" -nR --unbuffered inputs |
-"$jqjq" --jq "$jq" -n "$program"
+# Directly invoke jqjq.jq, to pass --raw-input (-R) and --unbuffered to jq.
+# jqjq doesn't yet support --join-output (-j), so it needs to be piped to
+# another jq instance, which post-processes it. jq defaults to buffered output,
+# when it is piped, and needs overriding.
+"$jq" -nrR --unbuffered \
+  -L "$jqjq_dir" \
+  --args 'include "jqjq"; jqjq($ARGS.positional; $ENV)' \
+  -- \
+  -n "$program" |
+"$jq" -nj --unbuffered inputs

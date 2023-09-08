@@ -35,9 +35,6 @@ floating point numbers, and `readc` collapses CRLF to LF on Windows, because
 Run with gojq (`--jq=gojq`) to use arbitrary-precision integers and preserve
 line endings.
 
-jqjq currently does not support raw output, so text is outputted as JSON
-literals, when running with `wsjqjq`.
-
 ## See also
 
 [bf.jq](https://github.com/itchyny/brainfuck/blob/master/bf.jq) by itchyny
