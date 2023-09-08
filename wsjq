@@ -106,7 +106,7 @@ if [[ $mode = parse ]]; then
   options=-nR
 fi
 
-$jq $options \
+"$jq" $options \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
   --arg no_prompt "$no_prompt" \
