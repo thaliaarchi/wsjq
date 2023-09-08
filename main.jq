@@ -19,7 +19,7 @@ $src | parse |
 .check_retrieve = $check_retrieve == "true" |
 .filename = $filename |
 if   $mode == "run"    then interpret
-elif $mode == "debug"  then debug
+elif $mode == "debug"  then do_debug
 elif $mode == "disasm" then disasm_pc
 elif $mode == "parse"  then stat
 else "\($mode|tojson) is not a valid mode\n" | halt_error(2)
