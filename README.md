@@ -6,13 +6,14 @@ written in jq.
 ## Usage
 
 ```sh
-wsjq --help
-wsjq hworld.ws
-wsjq run hworld.ws
+wsjqjq --help
+wsjqjq hworld.ws
+wsjqjq run hworld.ws
 whoami > name.txt
-wsjq debug --in-file=name.txt --no-prompt name.ws
-wsjq disasm fact.ws
-wsjq --jq=gojq hworld.ws
+wsjqjq debug --in-file=name.txt --no-prompt name.ws
+wsjqjq disasm fact.ws
+wsjqjq --jq=gojq hworld.ws
+wsjqjq --jqjq=~/bin/jqjq hworld.ws
 ```
 
 wsjq requires at least jq 1.6 or gojq 0.12.9 (for [gojq#186](https://github.com/itchyny/gojq/issues/186)).

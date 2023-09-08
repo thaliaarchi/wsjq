@@ -43,6 +43,9 @@ Options:
   --jq=<path>
       Set the jq or gojq executable to use.
 
+  --jqjq=<path>
+      Set the jqjq executable to use.
+
   -h, --help
       Show usage.
 "
@@ -64,6 +67,7 @@ check_clean=false
 check_retrieve=false
 print_pc=false
 jq=jq
+jqjq=jqjq
 
 while getopts ':hi:e:ncrp-:' optchar; do
   case "$optchar" in
@@ -80,6 +84,8 @@ while getopts ':hi:e:ncrp-:' optchar; do
         print-pc)       print_pc=true ;;
         jq)             jq="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
         jq=*)           jq="${OPTARG#*=}" ;;
+        jqjq)           jqjq="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
+        jqjq=*)         jqjq="${OPTARG#*=}" ;;
         *)              echo "Invalid option --$OPTARG" >&2; exit 2 ;;
       esac;;
     h) usage ;;
@@ -107,15 +113,15 @@ if [[ ! -f $in_file && $in_file != /dev/null ]]; then
 fi
 
 jq="${jq/#\~/$HOME}"
-options=(-njMR)
-if [[ $mode = parse ]]; then
-  options=(-nR)
-fi
+jq_options=()
 if [[ ! "$jq" == *gojq ]]; then
-  options+=(--unbuffered)
+  jq_options=(--unbuffered)
 fi
 
-"$jq" "${options[@]}" \
+jqjq="${jqjq/#\~/$HOME}"
+
+# jqjq does not support environment args, so quote them with jq.
+env="$("$jq" -nr \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
   --arg no_prompt "$no_prompt" \
@@ -124,6 +130,27 @@ fi
   --arg print_pc "$print_pc" \
   --arg filename "$file" \
   --rawfile src "$file" \
-  --rawfile in "$in_file" \
-  -L "$SCRIPT_DIR" \
-  -f "$SCRIPT_DIR/main.jq"
+  --rawfile in "$in_file" '
+"
+\($mode | tojson) as $mode |
+\($on_eof | tojson) as $on_eof |
+\($no_prompt | tojson) as $no_prompt |
+\($check_clean | tojson) as $check_clean |
+\($check_retrieve | tojson) as $check_retrieve |
+\($print_pc | tojson) as $print_pc |
+\($filename | tojson) as $filename |
+\($src | tojson) as $src |
+\($in | tojson) as $in |
+"
+')"
+
+# Manually resolve imports.
+program="$env
+
+$(cat "$SCRIPT_DIR/ws.jq")
+
+$(sed '/^include /d' "$SCRIPT_DIR/main.jq")"
+
+# Quote inputs with jq, to work around jqjq not having -R.
+"$jq" -nR "${jq_options[@]}" inputs |
+"$jqjq" --jq "$jq" -n "$program"
