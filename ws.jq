@@ -4,7 +4,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-def color($c): "\u001b[" + $c + "m" + . + "\u001b[0m";
+def color($c): "\u001b[" + ($c|tostring) + "m" + . + "\u001b[0m";
 def black:   color(30); def bright_black:   color(90);
 def red:     color(31); def bright_red:     color(91);
 def green:   color(32); def bright_green:   color(92);
@@ -15,15 +15,15 @@ def cyan:    color(36); def bright_cyan:    color(96);
 def white:   color(37); def bright_white:   color(97);
 
 def inst_str:
-  if .arg != null then .opcode + " " + .arg else .opcode end;
+  if .arg != null then .opcode + " " + (.arg|tostring) else .opcode end;
 def inst_asm:
-  if .opcode == "label" then .arg + ":"
+  if .opcode == "label" then (.arg|tostring) + ":"
   else "    " + inst_str end;
 def inst_asm_pc($pc; $breaks; $width):
-  if .pc == $pc then .pc + "#" | yellow
+  if .pc == $pc then (.pc|tostring) + "#" | yellow
   elif .pc|tostring | in($breaks) then
-    if $breaks[.pc|tostring] then .pc + "*" | red else .pc + "*" end
-  else .pc + "-" end +
+    if $breaks[.pc|tostring] then (.pc|tostring) + "*" | red else (.pc|tostring) + "*" end
+  else (.pc|tostring) + "-" end +
   if .opcode == null then ""
   else
     ([$width - (.pc|tostring|length), 0] | max + 1) as $width |
@@ -36,7 +36,7 @@ def inst_pos($offset):
   (if $i < 0 then -(2+$i) else $i end) as $i |
   {line: ($i+1), col: ($offset-.[$i]+1)};
 def inst_pos_str($offset):
-  inst_pos($offset) | .line + ":" + .col;
+  inst_pos($offset) | (.line|tostring) + ":" + (.col|tostring);
 
 def prog_with_eof:
   if .i != null and .i < (.src|length) then .prog
@@ -103,7 +103,7 @@ def inst_error($msg; $inst; $pc):
   ($inst // .prog[$pc]) as $inst |
   ($msg|prefix_error)
   + if $inst.offset != null then
-      " at " + inst_pos_str($inst.offset) + " (offset " + $inst.offset + ")" else "" end
+      " at " + inst_pos_str($inst.offset) + " (offset " + ($inst.offset|tostring) + ")" else "" end
   + if $inst != null then ": " + ($inst | inst_str) else "" end + "\n"
   + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end
   + if .pc != null then "\n" + dump_state else "" end |
@@ -151,7 +151,7 @@ def parse_inst:
     else . end |
     if type != "array" then .
     elif length > 1 and .[0] == 0 then "%b" + join("")
-    else "%" + $n end;
+    else "%" + ($n|tostring) end;
 
   def inst($opcode): .prog += [{opcode:$opcode, offset, pc:.prog|length}];
   def inst_num($opcode):
