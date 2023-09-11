@@ -153,15 +153,15 @@ def parse_inst:
     elif length > 1 and .[0] == 0 then "%b\(join(""))"
     else "%\($n)" end;
 
-  def inst($opcode): .prog += [{opcode:$opcode, offset, pc:.prog|length}];
+  def inst($opcode): .prog += [{$opcode, offset, pc:.prog|length}];
   def inst_num($opcode):
     .n = 0 | match_char(parse_num; parse_num | .n*=-1; .) |
     if .n == 0 then .n = 0 else . end | # Normalize -0
-    .prog += [{opcode:$opcode, arg:.n, offset, pc:.prog|length}] |
+    .prog += [{$opcode, arg:.n, offset, pc:.prog|length}] |
     del(.n);
   def inst_lbl($opcode):
     .n = 0 | .l = [] | parse_lbl |
-    .prog += [{opcode:$opcode, arg:lbl_str, offset, pc:.prog|length}] |
+    .prog += [{$opcode, arg:lbl_str, offset, pc:.prog|length}] |
     del(.n, .l);
   def inst_err: inst_error("unrecognized instruction"; {opcode:.tok, offset});
 
@@ -270,13 +270,13 @@ def stat:
     if $inst_counts.dumpheap != null then "debug_printheap" else empty end])
     as $nonstandard |
   {
-    filename: $filename,
+    $filename,
     program: .prog,
     labels,
-    spec_version: $spec_version,
-    nonstandard: $nonstandard,
-    inst_counts: $inst_counts,
-    token_counts: $token_counts,
+    $spec_version,
+    $nonstandard,
+    $inst_counts,
+    $token_counts,
   };
 
 def floor_div($x; $y):
