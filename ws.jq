@@ -97,23 +97,33 @@ def dump_state:
   "Heap:  {\(dump_heap_map)}\n" +
   "\(dump_heap_table(10))";
 
+def parse_error($msg; $inst):
+  .error = {$msg, $inst} | error;
+def inst_error($msg):
+  .error = {$msg, pc: (.pc0 // .prog|length)} | error;
+
 def prefix_error: ("Error:"|bright_red) + " " + .;
-def inst_error($msg; $inst; $pc):
-  ($pc // .pc0 // .prog|length) as $pc |
-  ($inst // .prog[$pc]) as $inst |
-  ($msg|prefix_error)
+def format_error:
+  (.error.inst // .prog[.error.pc]) as $inst |
+  (.error.msg|prefix_error)
   + if $inst.offset != null then
       " at \(inst_pos_str($inst.offset)) (offset \($inst.offset))" else "" end
   + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
-  + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end
-  + if .pc != null then "\n" + dump_state else "" end |
-  halt_error(1);
-def inst_error($msg; $inst): inst_error($msg; $inst; $inst.pc);
-def inst_error($msg): inst_error($msg; null);
+  + if .prog|length > 0 then "\n" + trace(.error.pc; 4) else "" end;
 
-def assert($cond; msg; inst):
-  if $cond then . else inst_error(msg; inst) end;
-def assert($cond; msg): assert($cond; msg; null);
+def parse_assert($cond; msg; inst):
+  if $cond then . else parse_error(msg; inst) end;
+def assert($cond; msg):
+  if $cond then . else inst_error(msg) end;
+
+def halt_on_error(f):
+  try f
+  catch
+    if type == "object" and .error != null then
+      format_error
+      + if .pc != null then "\n" + dump_state else "" end |
+      halt_error(1)
+    else error end;
 
 def S: 32;
 def T: 9;
@@ -128,7 +138,7 @@ def match_char(s; t; l; eof):
   else match_char(s; t; l; eof) end;
 def match_char(s; t; l):
   match_char(s; t; l;
-    inst_error("unexpected EOF"; {opcode:(.tok+"[EOF]"), offset:(.i-1)}));
+    parse_error("unexpected EOF"; {opcode:(.tok+"[EOF]"), offset:(.i-1)}));
 
 def parse_inst:
   def parse_num:
@@ -163,7 +173,7 @@ def parse_inst:
     .n = 0 | .l = [] | parse_lbl |
     .prog += [{$opcode, arg:lbl_str, offset, pc:.prog|length}] |
     del(.n, .l);
-  def inst_err: inst_error("unrecognized instruction"; {opcode:.tok, offset});
+  def inst_err: parse_error("unrecognized instruction"; {opcode:.tok, offset});
 
   .offset = .i | .tok = "" |
   match_char(
@@ -233,7 +243,7 @@ def label_map:
   . as $state |
   reduce (.prog[] | select(.opcode == "label")) as $inst
     ({}; . as $labels |($inst.arg|tostring) as $lbl |
-      $state | assert($labels[$lbl] == null; "label redefined"; $inst) |
+      $state | parse_assert($labels[$lbl] == null; "label redefined"; $inst) |
       $labels | .[$lbl] = $inst.pc);
 
 def parse:
@@ -346,6 +356,7 @@ def interpret_step:
     store(top; $n) | pop;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
+  assert(.error == null; "interpreter stopped from error") |
   .prog[.pc] as $inst | $inst as {opcode:$t, arg:$n} |
   .pc0 = .pc | .pc += 1 |
   if   $t == "push"     then push($n)
@@ -488,8 +499,8 @@ def debug:
     if .[-1:] != "\n" then . + ("⏎\n"|bright_black) else . end;
 
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
-  def _debug:
-    if .moved and .pc < (.prog|length) then trace(.pc; 0; 3)
+  def debug_cmd:
+    if .moved and .pc < (.prog|length) and .error == null then trace(.pc; 0; 3)
     else empty end,
     ("(wsjq)"|bright_black+" "),
     ((try input
@@ -500,7 +511,7 @@ def debug:
     ($words[0] // "") as $c | $words[1:] as $args |
     .moved = false |
     if   $c == ""               then .
-    elif $c|iscmd("run")        then .cmd = "" | run
+    elif $c|iscmd("run")        then .cmd = "" | .error = null | run
     elif $c|iscmd("continue")   then .cmd = $cmd | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next
@@ -512,14 +523,21 @@ def debug:
     elif $c|iscmd("output")     then (.out | print_io), .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
-    else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
-    if type != "object" then .
-    else _debug end);
+    else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end);
+  def _debug:
+    try
+      (debug_cmd |
+      if type == "object" then _debug else . end)
+    catch
+      if type == "object" and .error != null then
+        format_error, (.cmd = "" | _debug)
+      else error end;
 
   . + {
     debug: true, # debugger mode
     cmd: "",     # previous debug command
     breaks: {},  # breakpoints (key: pc, value: enabled boolean)
     moved: true, # whether the last command moved pc
+    error: null, # execution error
   } |
   interpret_init | _debug;

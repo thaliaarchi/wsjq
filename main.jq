@@ -12,13 +12,13 @@ include "ws";
     catch ("Invalid value for --on-eof: \"\($on_eof)\"\n" |
       prefix_error | halt_error(2))
   end) as $on_eof |
-$src | parse |
+$src | halt_on_error(parse) |
 .on_eof = $on_eof |
 .eof = $no_prompt == "true" |
 .check_clean = $check_clean == "true" |
 .check_retrieve = $check_retrieve == "true" |
 .filename = $filename |
-if   $mode == "run"    then interpret
+if   $mode == "run"    then halt_on_error(interpret)
 elif $mode == "debug"  then debug
 elif $mode == "disasm" then disasm_pc
 elif $mode == "parse"  then stat
