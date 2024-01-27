@@ -4,7 +4,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-def color($c): "\u001b[" + ($c|tostring) + "m" + . + "\u001b[0m";
+def color($c): "\u001b[\($c)m\(.)\u001b[0m";
 def black:   color(30); def bright_black:   color(90);
 def red:     color(31); def bright_red:     color(91);
 def green:   color(32); def bright_green:   color(92);
@@ -15,15 +15,15 @@ def cyan:    color(36); def bright_cyan:    color(96);
 def white:   color(37); def bright_white:   color(97);
 
 def inst_str:
-  if .arg != null then .opcode + " " + (.arg|tostring) else .opcode end;
+  if .arg != null then "\(.opcode) \(.arg)" else .opcode end;
 def inst_asm:
-  if .opcode == "label" then (.arg|tostring) + ":"
-  else "    " + inst_str end;
+  if .opcode == "label" then "\(.arg):"
+  else "    \(inst_str)" end;
 def inst_asm_pc($pc; $breaks; $width):
-  if .pc == $pc then (.pc|tostring) + "#" | yellow
+  if .pc == $pc then "\(.pc)#"|yellow
   elif .pc|tostring | in($breaks) then
-    if $breaks[.pc|tostring] then (.pc|tostring) + "*" | red else (.pc|tostring) + "*" end
-  else (.pc|tostring) + "-" end +
+    if $breaks[.pc|tostring] then "\(.pc)*"|red else "\(.pc)*" end
+  else "\(.pc)-" end +
   if .opcode == null then ""
   else
     ([$width - (.pc|tostring|length), 0] | max + 1) as $width |
@@ -36,7 +36,7 @@ def inst_pos($offset):
   (if $i < 0 then -(2+$i) else $i end) as $i |
   {line: ($i+1), col: ($offset-.[$i]+1)};
 def inst_pos_str($offset):
-  inst_pos($offset) | (.line|tostring) + ":" + (.col|tostring);
+  inst_pos($offset) | "\(.line):\(.col)";
 
 def prog_with_eof:
   if .i != null and .i < (.src|length) then .prog
@@ -61,7 +61,7 @@ def trace($pc; $n): trace($pc; $n; $n);
 def dump_stack: .s | join(", ");
 def dump_calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
 def dump_heap_map:
-  [(.h | keys | sort_by(tonumber)[]) as $k | $k + ":" + .h[$k]] |
+  [(.h | keys | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
   join(", ");
 def dump_heap_table($cols):
   (.h | map(tostring | length) | max + 1) as $cell_width |
@@ -92,10 +92,10 @@ def dump_heap_table($cols):
       "|" + (.value | format_cells) + "\n") |
     join(""));
 def dump_state:
-  "Stack: [" + dump_stack + "]\n" +
-  "Calls: [" + dump_calls + "]\n" +
-  "Heap:  {" + dump_heap_map + "}\n" +
-  dump_heap_table(10);
+  "Stack: [\(dump_stack)]\n" +
+  "Calls: [\(dump_calls)]\n" +
+  "Heap:  {\(dump_heap_map)}\n" +
+  "\(dump_heap_table(10))";
 
 def prefix_error: ("Error:"|bright_red) + " " + .;
 def inst_error($msg; $inst; $pc):
@@ -103,8 +103,8 @@ def inst_error($msg; $inst; $pc):
   ($inst // .prog[$pc]) as $inst |
   ($msg|prefix_error)
   + if $inst.offset != null then
-      " at " + inst_pos_str($inst.offset) + " (offset " + ($inst.offset|tostring) + ")" else "" end
-  + if $inst != null then ": " + ($inst | inst_str) else "" end + "\n"
+      " at \(inst_pos_str($inst.offset)) (offset \($inst.offset))" else "" end
+  + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
   + if .prog|length > 0 then "\n" + trace($pc; 4) else "" end
   + if .pc != null then "\n" + dump_state else "" end |
   halt_error(1);
@@ -150,8 +150,8 @@ def parse_inst:
       then implode else . end
     else . end |
     if type != "array" then .
-    elif length > 1 and .[0] == 0 then "%b" + join("")
-    else "%" + ($n|tostring) end;
+    elif length > 1 and .[0] == 0 then "%b\(join(""))"
+    else "%\($n)" end;
 
   def inst($opcode): .prog += [{opcode:$opcode, offset, pc:.prog|length}];
   def inst_num($opcode):
@@ -303,7 +303,7 @@ def interpret_step:
     .h[$addr|tostring] = $val;
   def retrieve($addr):
     assert((.check_retrieve|not) or $addr <= .max_addr;
-      "retrieve above maximum stored address (" + $addr + " > " + .max_addr + ")") |
+      "retrieve above maximum stored address (\($addr) > \(.max_addr))") |
     .h[$addr|tostring] // 0;
   def jmp($l):
     assert(.labels|has($l); "undefined label") | .pc = .labels[$l];
@@ -311,12 +311,12 @@ def interpret_step:
   def print($op; format):
     format as $v |
     if .debug then
-      ($op+">"|bright_cyan + " " + ($v | tojson) + "\n"),
+      ($op+">"|bright_cyan + " \($v | tojson)\n"),
         (.out += ($v | tostring) | pop)
     else ($v | tostring), pop end;
   def printc:
     top as $c |
-    assert($c >= 0 and $c <= 1114111; "printing invalid codepoint (" + $c + ")") |
+    assert($c >= 0 and $c <= 1114111; "printing invalid codepoint (\($c))") |
     [$c] | implode;
   def read(handle_read):
     assert_len(1) |
@@ -372,8 +372,8 @@ def interpret_step:
   elif $t == "printi"   then print("printi"; top)
   elif $t == "readc"    then read(readc)
   elif $t == "readi"    then read(readi)
-  elif $t == "dumpstack"then "Stack: [" + dump_stack + "]\n", .
-  elif $t == "dumpheap" then "Heap: {" + dump_heap_map + "}\n", .
+  elif $t == "dumpstack"then "Stack: [\(dump_stack)]\n", .
+  elif $t == "dumpheap" then "Heap: {\(dump_heap_map)}\n", .
   else inst_error("malformed instruction") end;
 
 def interpret_step_debug:
@@ -472,7 +472,7 @@ def do_debug:
         (try ($v|tonumber) catch -1) as $n |
         if 0 <= $n and $n < (.prog|length) and ($n|. == trunc) then
           .breaks[$v] |= toggle
-        else ("label or pc not found: " + $v + "\n"|prefix_error), . end
+        else ("label or pc not found: \($v)\n"|prefix_error), . end
       end
     else . end |
     if type == "object" then
@@ -512,7 +512,7 @@ def do_debug:
     elif $c|iscmd("output")     then (.out | print_io), .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
-    else (($cmd|tojson) + " is not a valid command\n"|prefix_error), . end |
+    else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end |
     if type != "object" then .
     else _debug end);
 
