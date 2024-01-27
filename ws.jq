@@ -453,7 +453,7 @@ def check_clean_exit:
   else . end;
 def interpret: interpret_init | interpret_continue | check_clean_exit;
 
-def do_debug:
+def debug:
   def help:
     "Debugger commands:\n" +
     "  r, run        -- Run or restart the program from the start\n" +
