@@ -350,7 +350,7 @@ def interpret_step:
   def readi:
     (.in_buf|index("\n")) as $i | .in_buf[:$i] as $line |
     .in_consumed += .in_buf[:$i+1] | .in_buf |= .[$i+1:] |
-    (try ($line|tonumber) catch .5) as $n |
+    ($line|tonumber? // .5) as $n |
     assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
       "invalid integer " + ($line | tojson)) |
     store(top; $n) | pop;
@@ -480,7 +480,7 @@ def debug:
       if .labels|has($v) then
         .breaks[.labels[$v]|tostring] |= toggle
       else
-        (try ($v|tonumber) catch -1) as $n |
+        ($v|tonumber? // -1) as $n |
         if 0 <= $n and $n < (.prog|length) and ($n|. == trunc) then
           .breaks[$v] |= toggle
         else ("label or pc not found: \($v)\n"|prefix_error), . end
