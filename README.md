@@ -39,14 +39,14 @@ line endings.
 
 ## See also
 
-[bf.jq](https://github.com/itchyny/brainfuck/blob/master/bf.jq) by itchyny
+[bf.jq](https://github.com/itchyny/brainfuck/blob/main/bf.jq) by itchyny
 ([blog post](https://itchyny.medium.com/json-formatter-written-in-jq-b716c281afd7))
 and [bf.jq](https://github.com/MakeNowJust/bf.jq/blob/master/bf.jq) by
 MakeNowJust are Brainfuck interpreters written in jq, though neither support the
 `,` read operator and both display `.` output on program termination.
 
 The jq standard library filters defined in
-[builtin.jq](https://github.com/stedolan/jq/blob/master/src/builtin.jq) are a
+[builtin.jq](https://github.com/jqlang/jq/blob/master/src/builtin.jq) are a
 helpful reference for learning advanced usage.
 
 ## License
