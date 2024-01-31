@@ -289,6 +289,8 @@ def stat:
     $token_counts,
   };
 
+def is_integer: test("^\\s*-?\\d+\\s*$");
+
 def floor_div($x; $y):
   ($x % $y) as $r |
   (($x - $r) / $y) as $q |
@@ -299,7 +301,7 @@ def floor_mod($x; $y):
   if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
   then $r + $y else $r end;
 
-def interpret_step:
+def exec_inst($t; $n):
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -350,40 +352,43 @@ def interpret_step:
   def readi:
     (.in_buf|index("\n")) as $i | .in_buf[:$i] as $line |
     .in_consumed += .in_buf[:$i+1] | .in_buf |= .[$i+1:] |
-    assert($line|test("^\\s*-?\\d+\\s*$"); "invalid integer \($line|tojson)") |
+    assert($line|is_integer; "invalid integer \($line|tojson)") |
     store(top; $line|tonumber) | pop;
 
+  if   $t == "push"      then push($n)
+  elif $t == "dup"       then push(top)
+  elif $t == "copy"      then push(at($n))
+  elif $t == "swap"      then .s = .s[:-2] + [top, top2]
+  elif $t == "drop"      then pop
+  elif $t == "slide"     then assert_len($n) | .s = .s[:-$n-1] + [top]
+  elif $t == "add"       then top2 += top | pop
+  elif $t == "sub"       then top2 -= top | pop
+  elif $t == "mul"       then top2 *= top | pop
+  elif $t == "div"       then assert_div | top2 = floor_div(top2; top) | pop
+  elif $t == "mod"       then assert_div | top2 = floor_mod(top2; top) | pop
+  elif $t == "store"     then store(top2; top) | pop | pop
+  elif $t == "retrieve"  then top = retrieve(top)
+  elif $t == "label"     then .
+  elif $t == "call"      then .c += [.pc] | jmp($n)
+  elif $t == "jmp"       then jmp($n)
+  elif $t == "jz"        then if top == 0 then jmp($n) else . end | pop
+  elif $t == "jn"        then if top < 0 then jmp($n) else . end | pop
+  elif $t == "ret"       then assert_ret | .pc = .c[-1] | .c |= .[:-1]
+  elif $t == "end"       then .pc = (.prog|length)
+  elif $t == "printc"    then print("printc"; printc)
+  elif $t == "printi"    then print("printi"; top)
+  elif $t == "readc"     then read(readc)
+  elif $t == "readi"     then read(readi)
+  elif $t == "dumpstack" then "Stack: [\(dump_stack)]\n", .
+  elif $t == "dumpheap"  then "Heap: {\(dump_heap_map)}\n", .
+  else inst_error("malformed instruction") end;
+
+def interpret_step:
   assert(.pc < (.prog|length); "interpreter stopped") |
   assert(.error == null; "interpreter stopped from error") |
-  .prog[.pc] as $inst | $inst as {opcode:$t, arg:$n} |
+  .prog[.pc] as {opcode:$t, arg:$n} |
   .pc0 = .pc | .pc += 1 |
-  if   $t == "push"     then push($n)
-  elif $t == "dup"      then push(top)
-  elif $t == "copy"     then push(at($n))
-  elif $t == "swap"     then .s = .s[:-2] + [top, top2]
-  elif $t == "drop"     then pop
-  elif $t == "slide"    then assert_len($n) | .s = .s[:-$n-1] + [top]
-  elif $t == "add"      then top2 += top | pop
-  elif $t == "sub"      then top2 -= top | pop
-  elif $t == "mul"      then top2 *= top | pop
-  elif $t == "div"      then assert_div | top2 = floor_div(top2; top) | pop
-  elif $t == "mod"      then assert_div | top2 = floor_mod(top2; top) | pop
-  elif $t == "store"    then store(top2; top) | pop | pop
-  elif $t == "retrieve" then top = retrieve(top)
-  elif $t == "label"    then .
-  elif $t == "call"     then .c += [.pc] | jmp($n)
-  elif $t == "jmp"      then jmp($n)
-  elif $t == "jz"       then if top == 0 then jmp($n) else . end | pop
-  elif $t == "jn"       then if top < 0 then jmp($n) else . end | pop
-  elif $t == "ret"      then assert_ret | .pc = .c[-1] | .c |= .[:-1]
-  elif $t == "end"      then .pc = (.prog|length)
-  elif $t == "printc"   then print("printc"; printc)
-  elif $t == "printi"   then print("printi"; top)
-  elif $t == "readc"    then read(readc)
-  elif $t == "readi"    then read(readi)
-  elif $t == "dumpstack"then "Stack: [\(dump_stack)]\n", .
-  elif $t == "dumpheap" then "Heap: {\(dump_heap_map)}\n", .
-  else inst_error("malformed instruction") end;
+  exec_inst($t; $n);
 
 def interpret_step_debug:
   def print_exit_status:
@@ -458,6 +463,7 @@ def debug:
     "  c, continue   -- Continue from the current instruction\n" +
     "  s, step       -- Execute next instruction, stepping into calls\n" +
     "  n, next       -- Execute next instruction, stepping over calls\n" +
+    "  e, exec       -- Execute the given instruction\n" +
     "  b, breakpoint -- Set or clear a breakpoint\n" +
     "  d, disasm     -- Disassemble program\n" +
     "  l, labels     -- List labels in program\n" +
@@ -465,11 +471,51 @@ def debug:
     "  i, input      -- Dump the input read from stdin so far\n" +
     "  o, output     -- Dump the output written to stdout so far\n" +
     "  q, quit       -- Quit the debugger\n" +
-    "  h, help       -- Show a list of all debugger commands\n";
+    "  h, help       -- Show a list of all debugger commands\n" +
+    "  <instruction> -- Shorthand for exec\n";
 
   def run:
     if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
+
+  def exec($args):
+    def parse_args($t; $args):
+      $args[0] as $n | $n |
+      if $t == "push" then
+        if $args | length != 1 then
+          "expected integer or character argument" | error end |
+        if . == "'\\''" then 39
+        elif . == "'\"'" then 34
+        elif .[:1] == "'" then
+          if . == "'''" then "invalid character" | error end |
+          try ("\"\(.[1:-1])\"" | fromjson)
+          catch ("invalid character" | error) |
+          explode |
+          if length != 1 then "invalid character" | error
+          else .[0] end
+        else
+          if is_integer | not then "invalid integer or character" | error
+          else tonumber end
+        end
+      elif $t == "copy" or $t == "slide" then
+        if $args | length != 1 then "expected integer argument" | error end |
+        if is_integer | not then "invalid integer" | error
+        else tonumber end
+      elif $t == "call" or $t == "jmp" or $t == "jz" or $t == "jn" then
+        if $args | length != 1 then "expected label argument" | error end
+      else
+        if $args | length != 0 then "unexpected arguments" | error end
+      end;
+    if $args|length <= 1 then ("expected instruction\n"|prefix_error), . end |
+    $args[0] as $t | $args[1:] as $args |
+    . as $state |
+    try
+      parse_args($t; $args) as $n |
+      exec_inst($t; $n)
+    catch
+      if type == "string" then (. + "\n" | prefix_error), $state
+      else error end;
+
   def breakpoint($args):
     if $args|length > 1 then ("too many arguments\n"|prefix_error), .
     elif $args|length == 1 then
@@ -481,7 +527,7 @@ def debug:
         ($v|tonumber? // -1) as $n |
         if 0 <= $n and $n < (.prog|length) and ($n|. == trunc) then
           .breaks[$v] |= toggle
-        else ("label or pc not found: \($v)\n"|prefix_error), . end
+        else ("undefined label or out-of-range pc: \($v)\n"|prefix_error), . end
       end
     else . end |
     if type == "object" then
@@ -513,6 +559,7 @@ def debug:
     elif $c|iscmd("continue")   then .cmd = $cmd | interpret_continue_debug
     elif $c|iscmd("step")       then .cmd = $cmd | interpret_step_debug
     elif $c|iscmd("next")       then .cmd = $cmd | interpret_next
+    elif $c|iscmd("exec")       then exec($args)
     elif $c|iscmd("breakpoint") then breakpoint($args)
     elif $c|iscmd("disasm")     then disasm_pc, .
     elif $c|iscmd("labels")     then list_labels, .
@@ -521,6 +568,10 @@ def debug:
     elif $c|iscmd("output")     then (.out | print_io), .
     elif $c|iscmd("quit")       then ""
     elif $c|iscmd("help")       then help, .
+    elif ["push", "dup", "copy", "swap", "drop", "slide", "add", "sub", "mul",
+      "div", "mod", "store", "retrieve", "label", "call", "jmp", "jz", "jn",
+      "ret", "end", "printc", "printi", "readc", "readi", "dumpstack",
+      "dumpheap"] | contains([$c]) then exec($words)
     else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end);
   def _debug:
     try
