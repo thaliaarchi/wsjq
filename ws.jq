@@ -501,7 +501,7 @@ def debug:
         if $args | length != 1 then "expected integer argument" | error end |
         if is_integer | not then "invalid integer" | error
         else tonumber end
-      elif $t == "call" or $t == "jmp" or $t == "jz" or $t == "jn" then
+      elif ["label", "call", "jmp", "jz", "jn"] | contains([$t]) then
         if $args | length != 1 then "expected label argument" | error end
       else
         if $args | length != 0 then "unexpected arguments" | error end
@@ -511,7 +511,12 @@ def debug:
     . as $state |
     try
       parse_args($t; $args) as $n |
-      exec_inst($t; $n)
+      if $t == "label" then
+        if .labels|has($n) then "label redefined" | error
+        else .labels[$n|tostring] = .pc end
+      else
+        exec_inst($t; $n)
+      end
     catch
       if type == "string" then (. + "\n" | prefix_error), $state
       else error end;
