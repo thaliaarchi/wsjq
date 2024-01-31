@@ -105,11 +105,17 @@ def inst_error($msg):
 def prefix_error: ("Error:"|bright_red) + " " + .;
 def format_error:
   (.error.inst // .prog[.error.pc]) as $inst |
-  (.error.msg|prefix_error)
-  + if $inst.offset != null then
+  (.error.msg|prefix_error) +
+  if .exec then
+    " in exec (\(.exec.opcode)"
+    + if .exec.arg != null then " \(.exec.arg)" else "" end
+    + ")\n"
+  else
+    if $inst.offset != null then
       " at \(inst_pos_str($inst.offset)) (offset \($inst.offset))" else "" end
-  + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
-  + if .prog|length > 0 then "\n" + trace(.error.pc; 4) else "" end;
+    + if $inst != null then ": \($inst | inst_str)" else "" end + "\n"
+    + if .prog|length > 0 then "\n" + trace(.error.pc; 4) else "" end
+  end;
 
 def parse_assert($cond; msg; inst):
   if $cond then . else parse_error(msg; inst) end;
@@ -301,7 +307,7 @@ def floor_mod($x; $y):
   if ($r > 0 and $y < 0) or ($r < 0 and $y > 0)
   then $r + $y else $r end;
 
-def exec_inst($t; $n):
+def exec_inst($op; $arg):
   def assert_len($n): assert(.s|length >= $n; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
@@ -355,40 +361,40 @@ def exec_inst($t; $n):
     assert($line|is_integer; "invalid integer \($line|tojson)") |
     store(top; $line|tonumber) | pop;
 
-  if   $t == "push"      then push($n)
-  elif $t == "dup"       then push(top)
-  elif $t == "copy"      then push(at($n))
-  elif $t == "swap"      then .s = .s[:-2] + [top, top2]
-  elif $t == "drop"      then pop
-  elif $t == "slide"     then assert_len($n) | .s = .s[:-$n-1] + [top]
-  elif $t == "add"       then top2 += top | pop
-  elif $t == "sub"       then top2 -= top | pop
-  elif $t == "mul"       then top2 *= top | pop
-  elif $t == "div"       then assert_div | top2 = floor_div(top2; top) | pop
-  elif $t == "mod"       then assert_div | top2 = floor_mod(top2; top) | pop
-  elif $t == "store"     then store(top2; top) | pop | pop
-  elif $t == "retrieve"  then top = retrieve(top)
-  elif $t == "label"     then .
-  elif $t == "call"      then .c += [.pc] | jmp($n)
-  elif $t == "jmp"       then jmp($n)
-  elif $t == "jz"        then if top == 0 then jmp($n) else . end | pop
-  elif $t == "jn"        then if top < 0 then jmp($n) else . end | pop
-  elif $t == "ret"       then assert_ret | .pc = .c[-1] | .c |= .[:-1]
-  elif $t == "end"       then .pc = (.prog|length)
-  elif $t == "printc"    then print("printc"; printc)
-  elif $t == "printi"    then print("printi"; top)
-  elif $t == "readc"     then read(readc)
-  elif $t == "readi"     then read(readi)
-  elif $t == "dumpstack" then "Stack: [\(dump_stack)]\n", .
-  elif $t == "dumpheap"  then "Heap: {\(dump_heap_map)}\n", .
+  if   $op == "push"      then push($arg)
+  elif $op == "dup"       then push(top)
+  elif $op == "copy"      then push(at($arg))
+  elif $op == "swap"      then .s = .s[:-2] + [top, top2]
+  elif $op == "drop"      then pop
+  elif $op == "slide"     then assert_len($arg) | .s = .s[:-$arg-1] + [top]
+  elif $op == "add"       then top2 += top | pop
+  elif $op == "sub"       then top2 -= top | pop
+  elif $op == "mul"       then top2 *= top | pop
+  elif $op == "div"       then assert_div | top2 = floor_div(top2; top) | pop
+  elif $op == "mod"       then assert_div | top2 = floor_mod(top2; top) | pop
+  elif $op == "store"     then store(top2; top) | pop | pop
+  elif $op == "retrieve"  then top = retrieve(top)
+  elif $op == "label"     then .
+  elif $op == "call"      then .c += [.pc] | jmp($arg)
+  elif $op == "jmp"       then jmp($arg)
+  elif $op == "jz"        then if top == 0 then jmp($arg) else . end | pop
+  elif $op == "jn"        then if top < 0 then jmp($arg) else . end | pop
+  elif $op == "ret"       then assert_ret | .pc = .c[-1] | .c |= .[:-1]
+  elif $op == "end"       then .pc = (.prog|length)
+  elif $op == "printc"    then print("printc"; printc)
+  elif $op == "printi"    then print("printi"; top)
+  elif $op == "readc"     then read(readc)
+  elif $op == "readi"     then read(readi)
+  elif $op == "dumpstack" then "Stack: [\(dump_stack)]\n", .
+  elif $op == "dumpheap"  then "Heap: {\(dump_heap_map)}\n", .
   else inst_error("malformed instruction") end;
 
 def interpret_step:
   assert(.pc < (.prog|length); "interpreter stopped") |
   assert(.error == null; "interpreter stopped from error") |
-  .prog[.pc] as {opcode:$t, arg:$n} |
+  .prog[.pc] as {opcode:$op, arg:$arg} |
   .pc0 = .pc | .pc += 1 |
-  exec_inst($t; $n);
+  exec_inst($op; $arg);
 
 def interpret_step_debug:
   def print_exit_status:
@@ -479,9 +485,9 @@ def debug:
     else interpret_init | interpret_continue_debug end;
 
   def exec($args):
-    def parse_args($t; $args):
-      $args[0] as $n | $n |
-      if $t == "push" then
+    def parse_args($op; $args):
+      $args[0] |
+      if $op == "push" then
         if $args | length != 1 then
           "expected integer or character argument" | error end |
         if . == "'\\''" then 39
@@ -497,26 +503,29 @@ def debug:
           if is_integer | not then "invalid integer or character" | error
           else tonumber end
         end
-      elif $t == "copy" or $t == "slide" then
+      elif $op == "copy" or $op == "slide" then
         if $args | length != 1 then "expected integer argument" | error end |
         if is_integer | not then "invalid integer" | error
         else tonumber end
-      elif ["label", "call", "jmp", "jz", "jn"] | contains([$t]) then
+      elif ["label", "call", "jmp", "jz", "jn"] | contains([$op]) then
         if $args | length != 1 then "expected label argument" | error end
       else
         if $args | length != 0 then "unexpected arguments" | error end
       end;
-    if $args|length <= 1 then ("expected instruction\n"|prefix_error), . end |
-    $args[0] as $t | $args[1:] as $args |
+
     . as $state |
     try
-      parse_args($t; $args) as $n |
-      if $t == "label" then
-        if .labels|has($n) then "label redefined" | error
-        else .labels[$n|tostring] = .pc end
+      (if $args|length <= 1 then "expected instruction" | error end |
+      $args[0] as $op | $args[1:] as $args |
+      parse_args($op; $args) as $arg |
+      if $op == "label" then
+        if .labels|has($arg) then "label redefined" | error
+        else .labels[$arg|tostring] = .pc end
       else
-        exec_inst($t; $n)
-      end
+        .exec = {opcode:$op, arg:$arg} |
+        exec_inst($op; $arg) |
+        del(.exec)
+      end)
     catch
       if type == "string" then (. + "\n" | prefix_error), $state
       else error end;
