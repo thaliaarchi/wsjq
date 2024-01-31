@@ -350,10 +350,8 @@ def interpret_step:
   def readi:
     (.in_buf|index("\n")) as $i | .in_buf[:$i] as $line |
     .in_consumed += .in_buf[:$i+1] | .in_buf |= .[$i+1:] |
-    ($line|tonumber? // .5) as $n |
-    assert(($n|. == trunc) and ($line | test("^\\s*[+-]?\\d+\\s*$"));
-      "invalid integer " + ($line | tojson)) |
-    store(top; $n) | pop;
+    assert($line|test("^\\s*-?\\d+\\s*$"); "invalid integer \($line|tojson)") |
+    store(top; $line|tonumber) | pop;
 
   assert(.pc < (.prog|length); "interpreter stopped") |
   assert(.error == null; "interpreter stopped from error") |
