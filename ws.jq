@@ -531,10 +531,8 @@ def debug:
       else error end;
 
   def breakpoint($args):
-    if $args|length > 1 then ("too many arguments\n"|prefix_error), .
-    elif $args|length == 1 then
-      def toggle: if . == null then true else not end;
-      $args[0] as $v |
+    def toggle: if . == null then true else not end;
+    reduce $args[] as $v (.;
       if .labels|has($v) then
         .breaks[.labels[$v]|tostring] |= toggle
       else
@@ -543,7 +541,7 @@ def debug:
           .breaks[$v] |= toggle
         else ("undefined label or out-of-range pc: \($v)\n"|prefix_error), . end
       end
-    else . end |
+    ) |
     if type == "object" then
       .breaks as $breaks |
       (.breaks | keys | map(tonumber) | sort[]) as $b |
