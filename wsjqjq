@@ -152,5 +152,6 @@ fi
   -L "$jqjq_dir" \
   --args 'include "jqjq"; jqjq($ARGS.positional; $ENV)' \
   -- \
+  -M \
   -n "$program" |
 "$jq" -nj "${jq_opts[@]}" inputs
