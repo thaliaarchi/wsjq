@@ -101,12 +101,15 @@ if [[ ! -f $in_file && $in_file != /dev/null ]]; then
 fi
 
 jq="${jq/#\~/$HOME}"
-options=-njMR
+options=(-njMR)
 if [[ $mode = parse ]]; then
-  options=-nR
+  options=(-nR)
+fi
+if [[ ! "$jq" == *gojq ]]; then
+  options+=(--unbuffered)
 fi
 
-"$jq" $options \
+"$jq" "${options[@]}" \
   --arg mode "$mode" \
   --arg on_eof "$on_eof" \
   --arg no_prompt "$no_prompt" \
