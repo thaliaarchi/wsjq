@@ -480,6 +480,9 @@ def debug:
     "  h, help       -- Show a list of all debugger commands\n" +
     "  <instruction> -- Shorthand for exec\n";
 
+  def print_error(msg):
+    . as $state | msg | prefix_error + "\n" | stderr | $state;
+
   def run:
     if .pc > 0 then ("[interpreter restarted]\n"|green), interpret_init
     else interpret_init | interpret_continue_debug end;
@@ -527,7 +530,7 @@ def debug:
         del(.exec)
       end)
     catch
-      if type == "string" then (. + "\n" | prefix_error), $state
+      if type == "string" then . as $msg | $state | print_error($msg)
       else error end;
 
   def breakpoint($args):
@@ -539,14 +542,14 @@ def debug:
         ($v|tonumber? // -1) as $n |
         if 0 <= $n and $n < (.prog|length) and ($n|. == trunc) then
           .breaks[$v] |= toggle
-        else ("undefined label or out-of-range pc: \($v)\n"|prefix_error), . end
+        else print_error("undefined label or out-of-range pc: \($v)") end
       end
     ) |
-    if type == "object" then
+    (
       .breaks as $breaks |
       (.breaks | keys | map(tonumber) | sort[]) as $b |
       .prog[$b] | inst_asm_pc(-1; $breaks; 0)
-    else empty end, .;
+    ), .;
   def list_labels:
     . as $state |
     [.prog[.labels | to_entries | sort_by(.value)[].value]] |
@@ -584,7 +587,7 @@ def debug:
       "div", "mod", "store", "retrieve", "label", "call", "jmp", "jz", "jn",
       "ret", "end", "printc", "printi", "readc", "readi", "dumpstack",
       "dumpheap"] | contains([$c]) then exec($words)
-    else ("\($cmd|tojson) is not a valid command\n"|prefix_error), . end);
+    else print_error("\($cmd|tojson) is not a valid command") end);
   def _debug:
     try
       (debug_cmd |
