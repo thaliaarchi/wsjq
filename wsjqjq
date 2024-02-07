@@ -153,13 +153,8 @@ $(cat "$SCRIPT_DIR/ws.jq")
 $(sed '/^include /d' "$SCRIPT_DIR/main.jq")"
 
 # Directly invoke jqjq.jq, to pass --raw-input (-R) and --unbuffered to jq.
-# jqjq doesn't yet support --join-output (-j), so it needs to be piped to
-# another jq instance, which post-processes it. jq defaults to buffered output,
-# when it is piped, and needs overriding.
-"$jq" -nrR "${jq_options[@]}" \
+exec "$jq" -njMR "${jq_options[@]}" \
   -L "$jqjq_dir" \
   --args 'include "jqjq"; jqjq($ARGS.positional; $ENV)' \
   -- \
-  -M \
-  -n "$program" |
-"$jq" -nj "${jq_options[@]}" inputs
+  -n -j -M "$program"
