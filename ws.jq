@@ -122,15 +122,6 @@ def parse_assert($cond; msg; inst):
 def assert($cond; msg):
   if $cond then . else inst_error(msg) end;
 
-def halt_on_error(f):
-  try f
-  catch
-    if type == "object" and .error != null then
-      format_error
-      + if .pc != null then "\n" + dump_state else "" end |
-      halt_error(1)
-    else error end;
-
 def S: 32;
 def T: 9;
 def L: 10;
@@ -293,7 +284,8 @@ def stat:
     $nonstandard,
     $inst_counts,
     $token_counts,
-  };
+  } |
+  if $state.error != null then .error = $state.error end;
 
 def is_integer: test("^\\s*-?\\d+\\s*$");
 

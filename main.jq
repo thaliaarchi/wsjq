@@ -6,22 +6,47 @@
 
 include "ws";
 
-(if $on_eof == "error" or $on_eof == null then "error"
-  else
-    try ($on_eof | tonumber | if . != trunc then error else . end)
-    catch ("Invalid value for --on-eof: \"\($on_eof)\"\n" |
-      prefix_error | halt_error(2))
-  end) as $on_eof |
-$src | halt_on_error(parse) |
-.on_eof = $on_eof |
-.eof = $no_prompt == "true" |
-.check_clean = $check_clean == "true" |
-.check_retrieve = $check_retrieve == "true" |
-.filename = $filename |
-if   $mode == "run"    then halt_on_error(interpret)
-elif $mode == "debug"  then debug
-elif $mode == "disasm" then disasm_pc
-elif $mode == "parse"  then stat
-else "\($mode|tojson) is not a valid mode\n" | halt_error(2)
+def parse_src: $src | parse;
+def setup_options:
+  .on_eof = (
+    if $on_eof == "error" or $on_eof == null then "error"
+    else
+      try ($on_eof | tonumber | if . != trunc then error else . end)
+      catch ("Invalid value for --on-eof: \"\($on_eof)\"\n" |
+        prefix_error | halt_error(2))
+    end
+  ) |
+  .eof = $no_prompt == "true" |
+  .check_clean = $check_clean == "true" |
+  .check_retrieve = $check_retrieve == "true" |
+  .filename = $filename;
+
+def dump_error(exit_code):
+  format_error
+  + if .pc != null then "\n" + dump_state else "" end |
+  halt_error(exit_code);
+def try_or_halt(f; exit_code):
+  try f
+  catch
+    if type == "object" and .error != null then dump_error(exit_code)
+    else error end;
+def try_or_continue(f):
+  try f
+  catch
+    if type == "object" and .error != null then .
+    else error end;
+
+if $mode == "run" then
+  try_or_halt(parse_src; 3) | setup_options | try_or_halt(interpret; 1)
+elif $mode == "debug" then
+  try_or_halt(parse_src; 3) | setup_options | debug
+elif $mode == "disasm" then
+  try_or_continue(parse_src) | setup_options |
+  disasm_pc, if .error != null then dump_error(3) else empty end
+elif $mode == "parse" then
+  try_or_continue(parse_src) | setup_options |
+  stat, if .error != null then dump_error(3) else empty end
+else
+  "\($mode|tojson) is not a valid mode\n" | halt_error(2)
 end |
 if $mode != "parse" then select(type == "string") else . end
