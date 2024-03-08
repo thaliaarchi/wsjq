@@ -127,12 +127,14 @@ def T: 9;
 def L: 10;
 
 def match_char(s; t; l; eof):
-  .src[.i] as $ch | .i+=1 |
-  if   $ch == S then .tok += "[Space]" | s
-  elif $ch == T then .tok += "[Tab]"   | t
-  elif $ch == L then .tok += "[LF]"    | .lines += [.i] | l
-  elif .i >= (.src|length) then eof
-  else match_char(s; t; l; eof) end;
+  def _match_char:
+    .src[.i] as $ch | .i+=1 |
+    if   $ch == S then .tok += "[Space]" | s
+    elif $ch == T then .tok += "[Tab]"   | t
+    elif $ch == L then .tok += "[LF]"    | .lines += [.i] | l
+    elif .i >= (.src|length) then eof
+    else _match_char end;
+  _match_char;
 def match_char(s; t; l):
   match_char(s; t; l;
     parse_error("unexpected EOF"; {opcode:(.tok+"[EOF]"), offset:(.i-1)}));
