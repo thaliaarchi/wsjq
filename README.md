@@ -45,6 +45,9 @@ and [bf.jq](https://github.com/MakeNowJust/bf.jq/blob/master/bf.jq) by
 MakeNowJust are Brainfuck interpreters written in jq, though neither support the
 `,` read operator and both display `.` output on program termination.
 
+[jqjq](https://github.com/wader/jqjq) by Mattias Wadman is a jq interpreter in
+jq. I have contributed features to help wsjq run in jqjq.
+
 The jq standard library filters defined in
 [builtin.jq](https://github.com/jqlang/jq/blob/master/src/builtin.jq) are a
 helpful reference for learning advanced usage.
