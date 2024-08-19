@@ -37,6 +37,9 @@ Options:
   -r, --check-retrieve
       Assert that retrieved addresses are not above previously-stored addresses.
 
+  -p, --print-pc
+      Prefix disassembled instructions with the instruction index.
+
   --jq=<path>
       Set the jq or gojq executable to use.
 
@@ -59,9 +62,10 @@ on_eof=error
 no_prompt=false
 check_clean=false
 check_retrieve=false
+print_pc=false
 jq=jq
 
-while getopts ':hi:e:ncr-:' optchar; do
+while getopts ':hi:e:ncrp-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
@@ -73,6 +77,7 @@ while getopts ':hi:e:ncr-:' optchar; do
         no-prompt)      no_prompt=true ;;
         check-clean)    check_clean=true ;;
         check-retrieve) check_retrieve=true ;;
+        print-pc)       print_pc=true ;;
         jq)             jq="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
         jq=*)           jq="${OPTARG#*=}" ;;
         *)              echo "Invalid option --$OPTARG" >&2; exit 2 ;;
@@ -83,6 +88,7 @@ while getopts ':hi:e:ncr-:' optchar; do
     n) no_prompt=true ;;
     c) check_clean=true ;;
     r) check_retrieve=true ;;
+    p) print_pc=true ;;
     *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
   esac
 done
@@ -115,6 +121,7 @@ fi
   --arg no_prompt "$no_prompt" \
   --arg check_clean "$check_clean" \
   --arg check_retrieve "$check_retrieve" \
+  --arg print_pc "$print_pc" \
   --arg filename "$file" \
   --rawfile src "$file" \
   --rawfile in "$in_file" \

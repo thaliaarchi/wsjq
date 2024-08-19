@@ -19,6 +19,7 @@ def setup_options:
   .eof = $no_prompt == "true" |
   .check_clean = $check_clean == "true" |
   .check_retrieve = $check_retrieve == "true" |
+  .print_pc = $print_pc == "true" |
   .filename = $filename;
 
 def dump_error(exit_code):
@@ -42,7 +43,8 @@ elif $mode == "debug" then
   try_or_halt(parse_src; 3) | setup_options | debug
 elif $mode == "disasm" then
   try_or_continue(parse_src) | setup_options |
-  disasm_pc, if .error != null then dump_error(3) else empty end
+  if .print_pc then disasm_pc else disasm end,
+  if .error != null then dump_error(3) else empty end
 elif $mode == "parse" then
   try_or_continue(parse_src) | setup_options |
   stat, if .error != null then dump_error(3) else empty end
