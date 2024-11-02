@@ -121,40 +121,28 @@ fi
 jqjq="${jqjq/#\~/$HOME}"
 jqjq_dir="$(dirname "$(realpath "$jqjq")")"
 
-# jqjq does not support environment args, so quote them with jq.
-env="$("$jq" -nr \
-  --arg mode "$mode" \
-  --arg on_eof "$on_eof" \
-  --arg no_prompt "$no_prompt" \
-  --arg check_clean "$check_clean" \
-  --arg check_retrieve "$check_retrieve" \
-  --arg print_pc "$print_pc" \
-  --arg filename "$file" \
-  --rawfile src "$file" \
-  --rawfile in "$in_file" '
-"
-\($mode | tojson) as $mode |
-\($on_eof | tojson) as $on_eof |
-\($no_prompt | tojson) as $no_prompt |
-\($check_clean | tojson) as $check_clean |
-\($check_retrieve | tojson) as $check_retrieve |
-\($print_pc | tojson) as $print_pc |
-\($filename | tojson) as $filename |
-\($src | tojson) as $src |
-\($in | tojson) as $in |
-"
-')"
-
 # Manually resolve imports.
-program="$env
-
-$(cat "$SCRIPT_DIR/ws.jq")
+program="$(cat "$SCRIPT_DIR/ws.jq")
 
 $(sed '/^include /d' "$SCRIPT_DIR/main.jq")"
 
-# Directly invoke jqjq.jq, to pass --raw-input (-R) and --unbuffered to jq.
-exec "$jq" -njMR "${jq_options[@]}" \
-  -L "$jqjq_dir" \
-  --args 'include "jqjq"; jqjq($ARGS.positional; $ENV)' \
-  -- \
-  -n -j -M "$program"
+# Directly invoke jqjq.jq, to pass --raw-input (-R) and --unbuffered to jq and
+# override the -L path.
+eval "$(
+  "$jq" -njMR "${jq_options[@]}" \
+    -L "$jqjq_dir" \
+    'include "jqjq"; $ARGS.positional | invoke_client_jqjq' \
+    --args -- \
+    -njM --unbuffered \
+    "$program" \
+    --arg mode "$mode" \
+    --arg on_eof "$on_eof" \
+    --arg no_prompt "$no_prompt" \
+    --arg check_clean "$check_clean" \
+    --arg check_retrieve "$check_retrieve" \
+    --arg print_pc "$print_pc" \
+    --arg filename "$file" \
+    --rawfile src "$file" \
+    --rawfile in "$in_file" |
+  sed -E s!'\$\(dirname "\$\(realpath "\$\{BASH_SOURCE\[0\]\}"\)"\)'!"$jqjq_dir"!
+)"
