@@ -74,7 +74,7 @@ def dump_heap_table($cols):
   reduce (keys[] | tonumber) as $row (.;
     if .[$row+1|tostring] == null then
       .[$row+1|tostring] = if .[$row+2|tostring] != null then [] else null end
-    else . end) |
+    end) |
   def pad_right($width): tostring | . + " " * ($width - length);
   def format_cells:
     if . == null or length == 0 then ""
@@ -155,9 +155,8 @@ def parse_inst:
       [range(0;length;8) as $i |
         reduce .[$i:$i+8][] as $d (0; .*2 + $d)] |
       # Label is visible ASCII and doesn't start with %
-      if all(33 <= . and . <= 126) and .[0] != 37
-      then implode else . end
-    else . end |
+      if all(33 <= . and . <= 126) and .[0] != 37 then implode end
+    end |
     if type != "array" then .
     elif length > 1 and .[0] == 0 then "%b\(join(""))"
     else "%\($n)" end;
@@ -165,7 +164,7 @@ def parse_inst:
   def inst($opcode): .prog += [{$opcode, offset, pc:.prog|length}];
   def inst_num($opcode):
     .n = 0 | match_char(parse_num; parse_num | .n*=-1; .) |
-    if .n == 0 then .n = 0 else . end | # Normalize -0
+    if .n == 0 then .n = 0 end | # Normalize -0
     .prog += [{$opcode, arg:.n, offset, pc:.prog|length}] |
     del(.n);
   def inst_lbl($opcode):
@@ -255,7 +254,7 @@ def parse:
     prog: [],     # instructions
   } |
   def _parse:
-    if .i < (.src|length) then parse_inst | _parse else . end;
+    if .i < (.src|length) then parse_inst | _parse end;
   _parse |
   del(.i, .offset, .tok) |
   .labels = label_map;
@@ -332,15 +331,13 @@ def exec_inst($op; $arg):
     [$c] | implode;
   def read(handle_read):
     assert_len(1) |
-    if .in_buf != "" or .eof then .
-    else
+    if .in_buf == "" and (.eof | not) then
       if .debug then "read<"|bright_cyan + " " else empty end,
       (. as $state |
         try (.in_buf = input + "\n")
         catch if . == "break" then $state | .eof = true else error end)
     end |
-    if type != "object" then .
-    else
+    if type == "object" then
       if .in_buf != "" then handle_read
       elif .on_eof|type == "number" then
         store(top; .on_eof) | pop | .in_consumed += ("[EOF]"|red)
@@ -371,8 +368,8 @@ def exec_inst($op; $arg):
   elif $op == "label"     then .
   elif $op == "call"      then .c += [.pc] | jmp($arg)
   elif $op == "jmp"       then jmp($arg)
-  elif $op == "jz"        then if top == 0 then jmp($arg) else . end | pop
-  elif $op == "jn"        then if top < 0 then jmp($arg) else . end | pop
+  elif $op == "jz"        then if top == 0 then jmp($arg) end | pop
+  elif $op == "jn"        then if top < 0 then jmp($arg) end | pop
   elif $op == "ret"       then assert_ret | .pc = .c[-1] | .c |= .[:-1]
   elif $op == "end"       then .pc = (.prog|length)
   elif $op == "printc"    then print("printc"; printc)
@@ -440,7 +437,7 @@ def interpret_next:
       (if $opcode == "call" then $depth+1
         elif $opcode == "ret" then $depth-1
         else $depth end) as $depth |
-      if $depth > 0 then _next($depth) else . end
+      if $depth > 0 then _next($depth) end
     end;
   _next(0);
 
@@ -452,8 +449,8 @@ def check_clean_exit:
       inst_error("exited implicitly")
     elif .s|length != 0 then
       inst_error("exited with non-empty stack")
-    else . end
-  else . end;
+    end
+  end;
 def interpret: interpret_init | interpret_continue | check_clean_exit;
 
 def debug:
@@ -549,12 +546,12 @@ def debug:
     [.prog[.labels | to_entries | sort_by(.value)[].value]] |
     disasm_pc_insts($state.pc; $state.breaks);
   def print_io:
-    if .[-1:] != "\n" then . + ("⏎\n"|bright_black) else . end;
+    if .[-1:] != "\n" then . + ("⏎\n"|bright_black) end;
 
   def iscmd($cmd): . == $cmd or . == $cmd[:1];
   def debug_cmd:
-    if .moved and .pc < (.prog|length) and .error == null then trace(.pc; 0; 3)
-    else empty end,
+    (select(.moved and .pc < (.prog|length) and .error == null) |
+      trace(.pc; 0; 3)),
     ("(wsjq)"|bright_black+" "),
     ((try input
       catch if . == "break" then "q" else error end) as $cmd |
@@ -585,7 +582,7 @@ def debug:
   def _debug:
     try
       (debug_cmd |
-      if type == "object" then _debug else . end)
+      if type == "object" then _debug end)
     catch
       if type == "object" and .error != null then
         format_error, (.cmd = "" | _debug)
