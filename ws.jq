@@ -95,7 +95,7 @@ def dump_state:
   "Stack: [\(dump_stack)]\n" +
   "Calls: [\(dump_calls)]\n" +
   "Heap:  {\(dump_heap_map)}\n" +
-  "\(dump_heap_table(10))";
+  if .h | length > 0 then dump_heap_table(10) else "" end;
 
 def parse_error($msg; $inst):
   .error = {$msg, $inst} | error;
