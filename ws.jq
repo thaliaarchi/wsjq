@@ -310,9 +310,11 @@ def exec_inst($op; $arg):
   def top2: at(1);
   def assert_div: assert(top != 0; "zero divisor");
   def store($addr; $val):
+    assert($addr >= 0; "store at negative address") |
     .max_addr = ([.max_addr, $addr] | max) |
     .h[$addr|tostring] = $val;
   def retrieve($addr):
+    assert($addr >= 0; "retrieve at negative address") |
     assert((.check_retrieve|not) or $addr <= .max_addr;
       "retrieve above maximum stored address (\($addr) > \(.max_addr))") |
     .h[$addr|tostring] // 0;
