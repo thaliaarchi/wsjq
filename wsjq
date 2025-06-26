@@ -111,7 +111,7 @@ options=(-njMR)
 if [[ $mode = parse ]]; then
   options=(-nR)
 fi
-if [[ ! "$jq" == *gojq ]]; then
+if [[ ! "$jq" =~ (^|[/\\])(gojq|jaq)[^/\\]*$ ]]; then
   options+=(--unbuffered)
 fi
 
