@@ -43,10 +43,10 @@ def prog_with_eof:
   else .prog + [{offset:.src|length, pc:.prog|length}] end;
 
 def disasm:
-  [.prog[] | inst_asm + "\n"] | join("");
+  [.prog[] | inst_asm + "\n"] | join("") // "";
 def disasm_pc_insts($pc; $breaks):
   (last.pc|tostring|length) as $w |
-  map(inst_asm_pc($pc; $breaks; $w)) | join("");
+  map(inst_asm_pc($pc; $breaks; $w)) | join("") // "";
 def disasm_pc:
   . as $state |
   prog_with_eof | disasm_pc_insts($state.pc; $state.breaks);
@@ -58,11 +58,11 @@ def trace($pc; $n_before; $n_after):
   disasm_pc_insts($pc; $breaks);
 def trace($pc; $n): trace($pc; $n; $n);
 
-def dump_stack: .s | join(", ");
-def dump_calls: [.c[] as $c | .prog[$c-1].arg] | join(", ");
+def dump_stack: .s | join(", ") // "";
+def dump_calls: [.c[] as $c | .prog[$c-1].arg] | join(", ") // "";
 def dump_heap_map:
   [(.h | keys | sort_by(tonumber)[]) as $k | "\($k):\(.h[$k])"] |
-  join(", ");
+  join(", ") // "";
 def dump_heap_table($cols):
   (.h | map(tostring | length) | max + 1) as $cell_width |
   (.h | keys | map(length) | max + 1) as $addr_width |
@@ -90,7 +90,7 @@ def dump_heap_table($cols):
       (if .value != null then .key|tonumber * $cols else "…" end) as $addr |
       ($addr | pad_right($addr_width)) +
       "|" + (.value | format_cells) + "\n") |
-    join(""));
+    join("") // "");
 def dump_state:
   "Stack: [\(dump_stack)]\n" +
   "Calls: [\(dump_calls)]\n" +
