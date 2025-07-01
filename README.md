@@ -15,7 +15,7 @@ wsjq disasm fact.ws
 wsjq --jq=gojq hworld.ws
 ```
 
-wsjq requires at least jq 1.6 or gojq 0.12.9 (for [gojq#186](https://github.com/itchyny/gojq/issues/186)).
+wsjq works with jq 1.8.0, [gojq](https://github.com/itchyny/gojq), and [jaq](https://github.com/01mf02/jaq).
 
 To run it with [jqjq](https://github.com/wader/jqjq), checkout the [jqjq-compat](https://github.com/thaliaarchi/wsjq/tree/jqjq-compat)
 branch and use `wsjqjq` instead of `wsjq`.
@@ -46,11 +46,29 @@ MakeNowJust are Brainfuck interpreters written in jq, though neither support the
 `,` read operator and both display `.` output on program termination.
 
 [jqjq](https://github.com/wader/jqjq) by Mattias Wadman is a jq interpreter in
-jq. I have contributed features to help wsjq run in jqjq.
+jq.
 
 The jq standard library filters defined in
 [builtin.jq](https://github.com/jqlang/jq/blob/master/src/builtin.jq) are a
 helpful reference for learning advanced usage.
+
+## Upstream improvements
+
+As a large and complex jq program, wsjq has directly driven several upstream
+improvements.
+
+- [gojq#186](https://github.com/itchyny/gojq/issues/186):
+  Bug with nested path and variable-style parameters
+- [jqjq#10](https://github.com/wader/jqjq/pull/10):
+  Running wsjq (implement more builtins)
+- [jqjq#13](https://github.com/wader/jqjq/pull/13):
+  Resolve user-defined filters before intrinsics
+- [jqjq#19](https://github.com/wader/jqjq/pull/19):
+  Staged CLI
+- [jaq#293](https://github.com/01mf02/jaq/issues/293):
+  Implement `bsearch`
+- [jaq#294](https://github.com/01mf02/jaq/issues/294):
+  Incorrect lexing of compound operators with unary minus
 
 ## License
 
