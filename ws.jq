@@ -21,7 +21,7 @@ def inst_asm:
   else "    \(inst_str)" end;
 def inst_asm_pc($pc; $breaks; $width):
   if .pc == $pc then "\(.pc)#"|yellow
-  elif .pc|tostring | in($breaks) then
+  elif $breaks != null and (.pc|tostring | in($breaks)) then
     if $breaks[.pc|tostring] then "\(.pc)*"|red else "\(.pc)*" end
   else "\(.pc)-" end +
   if .opcode == null then ""
