@@ -118,9 +118,9 @@ def format_error:
   end;
 
 def parse_assert($cond; msg; inst):
-  if $cond then . else parse_error(msg; inst) end;
+  if $cond | not then parse_error(msg; inst) end;
 def assert($cond; msg):
-  if $cond then . else inst_error(msg) end;
+  if $cond | not then inst_error(msg) end;
 
 def S: 32;
 def T: 9;
