@@ -54,21 +54,31 @@ helpful reference for learning advanced usage.
 
 ## Upstream improvements
 
-As a large and complex jq program, wsjq has directly driven several upstream
-improvements.
+As a large and complex jq program, wsjq has directly driven several improvements
+in various jq engines:
 
-- [gojq#186](https://github.com/itchyny/gojq/issues/186):
-  Bug with nested path and variable-style parameters
-- [jqjq#10](https://github.com/wader/jqjq/pull/10):
-  Running wsjq (implement more builtins)
-- [jqjq#13](https://github.com/wader/jqjq/pull/13):
-  Resolve user-defined filters before intrinsics
-- [jqjq#19](https://github.com/wader/jqjq/pull/19):
-  Staged CLI
-- [jaq#293](https://github.com/01mf02/jaq/issues/293):
-  Implement `bsearch`
-- [jaq#294](https://github.com/01mf02/jaq/issues/294):
-  Incorrect lexing of compound operators with unary minus
+- gojq
+  - [Bug with nested path and variable-style parameters #186](https://github.com/itchyny/gojq/issues/186):
+    fixed by itchyny
+- jqjq
+  - [Running wsjq #10](https://github.com/wader/jqjq/pull/10):
+    add `index/1`, `test/1`, `split/2`, `halt_error/1`, `bsearch/1`, and `in/1`,
+    and resolve symlinks
+  - [Resolve user-defined filters before intrinsics #13](https://github.com/wader/jqjq/pull/13):
+    fix `def debug`
+  - [Add string interpolation support](https://github.com/wader/jqjq/commit/4ef71ee36c3b00338d967d323c96a9315dedf0d1)
+    by wader
+  - [Format json with `JQ_COLORS` #14](https://github.com/wader/jqjq/pull/14):
+    add `-M`/`--monochrome-output` and `-j`/`--join-output`
+  - [Staged CLI #19](https://github.com/wader/jqjq/pull/19):
+    add `-f`/`--from-file`, `--arg`, `--rawfile`, and `--unbuffered`
+  - Remaining:
+    `-R`/`--raw-input`, `-L`/`--library-path`, and `include`
+- jaq
+  - [Missing builtins (`bsearch` and more) #293](https://github.com/01mf02/jaq/issues/293):
+    add `bsearch` by 01mf02
+  - [Incorrect lexing of compound operators with unary minus #294](https://github.com/01mf02/jaq/issues/294):
+    fixed by 01mf02
 
 ## License
 
