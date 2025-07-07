@@ -79,7 +79,8 @@ in various jq engines:
     add `bsearch` by 01mf02
   - [Incorrect lexing of compound operators with unary minus #294](https://github.com/01mf02/jaq/issues/294):
     fixed by 01mf02
-  - [Breaking changes to `join/1`](https://github.com/01mf02/jaq/issues/289#issuecomment-3026141724)
+  - [Convert inputs of `join` to strings](https://github.com/01mf02/jaq/pull/302):
+    fixed by 01mf02
 
 ## License
 
