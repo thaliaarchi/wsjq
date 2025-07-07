@@ -301,11 +301,12 @@ def floor_mod($x; $y):
   then $r + $y else $r end;
 
 def exec_inst($op; $arg):
-  def assert_len($n): assert(.s|length >= $n; "stack underflow");
+  def assert_len($n):
+    assert((.s|length >= $n) or .no_underflow; "stack underflow");
   def assert_ret: assert(.c|length >= 1; "call stack underflow");
   def push($n): .s += [$n];
   def pop: assert_len(1) | .s |= .[:-1];
-  def at($n): assert_len($n+1) | .s[-$n-1];
+  def at($n): assert_len($n+1) | .s[-$n-1] // 0;
   def top: at(0);
   def top2: at(1);
   def assert_div: assert(top != 0; "zero divisor");
@@ -357,9 +358,9 @@ def exec_inst($op; $arg):
   if   $op == "push"      then push($arg)
   elif $op == "dup"       then push(top)
   elif $op == "copy"      then push(at($arg))
-  elif $op == "swap"      then .s = .s[:-2] + [top, top2]
+  elif $op == "swap"      then assert_len(2) | .s |= .[:-2] + .[-1:] + .[-2:-1]
   elif $op == "drop"      then pop
-  elif $op == "slide"     then assert_len($arg) | .s = .s[:-$arg-1] + [top]
+  elif $op == "slide"     then assert_len($arg) | .s = .s[:-$arg-1] + .s[-1:]
   elif $op == "add"       then top2 += top | pop
   elif $op == "sub"       then top2 -= top | pop
   elif $op == "mul"       then top2 *= top | pop

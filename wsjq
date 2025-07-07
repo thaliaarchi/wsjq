@@ -37,6 +37,10 @@ Options:
   -r, --check-retrieve
       Assert that retrieved addresses are not above previously-stored addresses.
 
+  -u, --no-underflow
+      Do not error on stack underflow. Instead, use 0 when a value under the
+      stack is read.
+
   -p, --print-pc
       Prefix disassembled instructions with the instruction index.
 
@@ -63,9 +67,10 @@ no_prompt=false
 check_clean=false
 check_retrieve=false
 print_pc=false
+no_underflow=false
 jq=jq
 
-while getopts ':hi:e:ncrp-:' optchar; do
+while getopts ':hi:e:ncrup-:' optchar; do
   case "$optchar" in
     -)
       case "$OPTARG" in
@@ -77,6 +82,7 @@ while getopts ':hi:e:ncrp-:' optchar; do
         no-prompt)      no_prompt=true ;;
         check-clean)    check_clean=true ;;
         check-retrieve) check_retrieve=true ;;
+        no-underflow)   no_underflow=true ;;
         print-pc)       print_pc=true ;;
         jq)             jq="${!OPTIND}"; OPTIND=$(($OPTIND + 1)) ;;
         jq=*)           jq="${OPTARG#*=}" ;;
@@ -88,6 +94,7 @@ while getopts ':hi:e:ncrp-:' optchar; do
     n) no_prompt=true ;;
     c) check_clean=true ;;
     r) check_retrieve=true ;;
+    u) no_underflow=true ;;
     p) print_pc=true ;;
     *) echo "Invalid option -$OPTARG" >&2; exit 2 ;;
   esac
@@ -121,6 +128,7 @@ fi
   --arg no_prompt "$no_prompt" \
   --arg check_clean "$check_clean" \
   --arg check_retrieve "$check_retrieve" \
+  --arg no_underflow "$no_underflow" \
   --arg print_pc "$print_pc" \
   --arg filename "$file" \
   --rawfile src "$file" \

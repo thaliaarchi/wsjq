@@ -19,6 +19,7 @@ def setup_options:
   .eof = $no_prompt == "true" |
   .check_clean = $check_clean == "true" |
   .check_retrieve = $check_retrieve == "true" |
+  .no_underflow = $no_underflow == "true" |
   .print_pc = $print_pc == "true" |
   .filename = $filename;
 
